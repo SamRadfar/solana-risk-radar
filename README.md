@@ -1,142 +1,215 @@
 # Solana Risk Radar
 
-**Paste any Solana token address and understand its major risk signals within
-seconds.**
+**Paste any Solana token address and understand its major risk signals within seconds.**
 
 Built for the Superteam Germany **Road to Colosseum Hackathon**.
 
-Solana Risk Radar pulls real on-chain and market data for any SPL token mint,
-runs it through a transparent, deterministic scoring engine, and shows you
-exactly which signals — mint authority, freeze authority, holder
-concentration, liquidity, pool age, trading activity — drove the result. No
-LLM guesses whether a token is a "scam." Every number is explainable and
-backed by inspectable evidence.
+Risk Radar reads real on-chain and market data for any SPL token mint, runs it
+through a transparent deterministic scoring engine, and shows you exactly which
+signals drove the result — mint and freeze authority, Token-2022 transfer
+controls, holder concentration, liquidity depth, pool age, trading behaviour —
+with the raw evidence behind every one.
 
-> **Not financial advice.** This tool reports verifiable risk factors. It
-> never claims a token is "safe" or a "scam."
+No LLM decides whether a token is a scam. Every number comes from a published
+rule with a published threshold, and identical inputs always produce an
+identical score.
+
+> **Not financial advice.** This tool reports verifiable risk factors. It never
+> claims a token is "safe" or a "scam".
+
+![Solana Risk Radar analysing BONK](docs/hero.png)
+
+---
 
 ## Quick start
 
-Requirements: Node.js 20+.
+Requires Node.js 20+.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and paste a Solana token
-mint address (or click one of the example chips). That's it — **no API keys
-or accounts are required to run this app.** It works out of the box against
-Solana's public RPC endpoint and DexScreener's free public API.
+Open <http://localhost:3000>, paste a mint address (or click an example chip).
 
-### Improving holder-data reliability
+**No API keys. No accounts. No database.** The app works out of the box against
+public Solana RPC endpoints and DexScreener's free public API.
 
-Solana's public RPC endpoint aggressively rate-limits the specific method
-used for holder-concentration analysis (`getTokenLargestAccounts`). The app
-handles this gracefully — it marks those two signals "Unavailable" and
-excludes them from the score rather than failing the whole report — but for
-consistently reliable holder data, sign up for a **free** RPC provider tier
-(no cost, ~2 minutes) and set it in `.env.local`:
+### Optional: your own RPC endpoint
+
+Everything works without configuration. If you have a free-tier endpoint from
+[Helius](https://helius.dev), [QuickNode](https://quicknode.com) or
+[Alchemy](https://alchemy.com), setting it makes holder scans faster and
+removes rate-limit contention:
 
 ```bash
 cp .env.example .env.local
-# then edit .env.local:
-SOLANA_RPC_URL=https://your-endpoint-from-helius-or-quicknode-or-alchemy
+# then set SOLANA_RPC_URL in .env.local
 ```
 
-Good free-tier options: [Helius](https://helius.dev), [QuickNode](https://quicknode.com),
-[Alchemy](https://alchemy.com). No code changes needed — the app reads this
-one environment variable.
+See [`.env.example`](.env.example) for the details — including one endpoint you
+should *not* use.
+
+---
 
 ## Scripts
 
-```bash
-npm run dev      # start the dev server
-npm run build    # production build
-npm run start    # run the production build
-npm run lint     # eslint
-npx tsc --noEmit # type-check
-```
+| Command | What it does |
+|---|---|
+| `npm run dev` | Development server |
+| `npm run build` | Production build |
+| `npm run start` | Serve the production build |
+| `npm test` | Unit tests for the risk engine (no network) |
+| `npm run typecheck` | TypeScript, no emit |
+| `npm run lint` | ESLint |
+| `npm run verify` | typecheck → lint → test → build |
+| `npm run probe` | Integration probe against real mainnet tokens |
+| `npm run ui-check` | Headless browser check, desktop + mobile |
 
-## Documentation
+`probe` and `ui-check` need a running server; pass a URL to target another one
+(`npm run probe -- http://localhost:3100`).
 
-- [`ARCHITECTURE.md`](ARCHITECTURE.md) — stack, request flow, module
-  boundaries, and why they're drawn where they are.
-- [`METHODOLOGY.md`](METHODOLOGY.md) — the full, exact specification of every
-  risk rule: thresholds, point weights, and how the overall score is
-  computed.
-- [`DEMO.md`](DEMO.md) — a short walkthrough script for presenting the
-  project.
+---
 
-## How it works, in short
+## How it works
 
-1. You paste a mint address.
-2. The app validates it and fetches, in parallel:
-   - the SPL mint account (supply, decimals, mint/freeze authority) via
-     Solana RPC,
-   - on-chain Metaplex token metadata (name/symbol), parsed directly with no
-     API key,
-   - holder concentration via `getTokenLargestAccounts`,
-   - liquidity/volume/price/pool-age via [DexScreener](https://dexscreener.com)'s
-     free public API.
-3. Seven deterministic rules score the token (see `METHODOLOGY.md`) and
-   return a 0–100 score, a risk-band classification, and per-signal
-   explanations with raw evidence.
-4. The UI shows the score first (readable in ~5 seconds), then lets you
-   expand any signal to see exactly what data produced it.
+1. You paste a mint address. It is validated in the browser and again on the
+   server, using the same pure function.
+2. The server reads the mint account, then fetches four things concurrently:
+   - **on-chain metadata** — Metaplex PDA, or the Token-2022 metadata extension
+   - **holder distribution** — the largest token accounts, each resolved to its
+     owning wallet and classified
+   - **mint history** — earliest transaction, for token age
+   - **market data** — liquidity, volume, pool age and trade counts
+3. Fourteen deterministic rules score the result. Each returns a metric, an
+   observed value, a severity, a point contribution, a plain-English
+   explanation and inspectable evidence.
+4. The UI leads with the score and what it means, then the category profile,
+   then flagged signals, then everything that passed.
+
+Full detail: [`ARCHITECTURE.md`](ARCHITECTURE.md) ·
+[`METHODOLOGY.md`](METHODOLOGY.md) · [`DEMO.md`](DEMO.md)
+
+---
+
+## What it checks
+
+| Category | Weight | Signals |
+|---|---:|---|
+| **Authorities** | 58 | Mint authority, freeze authority, Token-2022 transfer controls, metadata mutability |
+| **Liquidity** | 32 | Total depth, depth vs market cap, pool diversity |
+| **Holders** | 30 | Largest holder, top 10 combined |
+| **Market activity** | 22 | Volume vs liquidity, buy/sell balance, 24h price movement |
+| **Maturity** | 22 | Pool age, token age |
+
+Total weight 164. Exact thresholds in [`METHODOLOGY.md`](METHODOLOGY.md).
+
+### Two things it does that most token checkers don't
+
+**Holders are classified, not just counted.** `getTokenLargestAccounts` returns
+token *accounts*, not people. A pool vault holding 40% of supply is liquidity,
+and a burn address holding 40% is supply that no longer exists — neither is a
+whale who can dump on you. Risk Radar resolves each account to its owning
+wallet, then classifies that wallet by the program that owns it, so
+concentration is measured over genuinely sellable supply. The breakdown is
+shown in full so you can check the call yourself.
+
+**Token-2022 extensions are read.** A permanent delegate can move tokens out of
+your wallet at any time, and a transfer hook can block a sale outright. These
+are invisible to checkers that only look at mint and freeze authority.
+
+---
+
+## Honesty about limits
+
+Risk Radar is built to be trustworthy about what it does *not* know:
+
+- **Missing data is excluded, never guessed.** A signal that cannot be measured
+  scores zero points *and* drops out of the denominator, so a token is never
+  made to look safe by data that failed to load. Coverage is shown on every
+  report, and below 40% the score is withheld entirely as "Insufficient Data".
+- **Token age is often unknowable.** It is derived from signature history; a
+  heavily traded token has more history than can be scanned, so its age is
+  reported as unmeasured rather than guessed. A *new* token resolves exactly —
+  which is the case that matters.
+- **Pool and burn shares cover the largest accounts only**, not the whole
+  supply. The UI says so where it matters.
+- **Market data reflects what DexScreener has indexed.** A token with no
+  indexed pool shows "no pools found", which is a real signal, not a bug.
+- **A clean report is not a guarantee.** Off-chain promises, team intent, and
+  logic in other programs are not visible here at all.
+
+---
 
 ## Testing
 
-Rule logic is pure and side-effect-free — each rule is a function of a typed
-`AnalysisInput` to a `RiskSignal`, independently testable with synthetic
-inputs (no network calls required). During development this was verified
-against synthetic "no liquidity pool," "brand-new pool," and "healthy mature
-pool" scenarios, plus manually against multiple real mainnet tokens across
-categories:
+Rule logic is pure — each rule is a function from a typed `AnalysisInput` to a
+`RiskSignal`, with no clock, randomness or I/O — so it is tested directly
+against synthetic inputs with no network:
 
-| Token | What it checks |
+```bash
+npm test        # 35 unit tests
+```
+
+These cover every threshold boundary, both directions of each two-sided rule,
+the missing-data paths, and the aggregation invariants (no signal can charge
+more than its weight; an unavailable signal charges nothing; identical inputs
+give identical scores).
+
+Beyond unit tests, the app was driven end to end against real mainnet tokens:
+
+| Token | What it exercises |
 |---|---|
-| USDC | mainstream, active mint/freeze authority (issuer-controlled by design), deep liquidity |
-| Wrapped SOL | Solana's native mint quirk (`supply` always reports `0` on-chain) |
-| BONK | renounced authorities, deep liquidity, healthy trading |
-| PYUSD | Token-2022 program path (not just legacy SPL Token) |
-| invalid strings / non-mint accounts / nonexistent accounts | error handling |
+| USDC | Mainstream asset with live mint *and* freeze authority by design |
+| Wrapped SOL | Reports `supply: 0` on chain — the division-by-zero trap |
+| BONK | Renounced authorities, deep liquidity, healthy trading |
+| JUP, PENGU, JitoSOL | Varied concentration and liquidity profiles |
+| PYUSD | Token-2022 path: permanent delegate, transfer hook, transfer fee |
+| TRUMP | Genuinely extreme holder concentration |
+| invalid / non-mint / token-account / nonexistent addresses | Error handling |
 
-The UI was also driven end-to-end with Playwright (desktop + mobile
-viewports) to confirm no console errors and correct rendering at each state
-(loading, result, evidence expansion).
+`npm run probe` re-runs that sweep and asserts the report invariants;
+`npm run ui-check` drives the real UI in Chromium at desktop and mobile widths,
+failing on any console error, page error or horizontal overflow.
+
+---
 
 ## Deployment
 
-This is a standard Next.js app — deploy it anywhere Next.js runs. The
-fastest path is [Vercel](https://vercel.com):
+A standard Next.js app — it runs anywhere Next.js runs. The fastest path:
 
 ```bash
 npx vercel
 ```
 
-Set `SOLANA_RPC_URL` as an environment variable in your hosting provider's
-dashboard if you want reliable holder data (optional — the app works without
-it). No other environment variables or secrets are required.
+No environment variables are required. If you want to use a private RPC
+endpoint, set `SOLANA_RPC_URL` in your host's dashboard; it is read server-side
+only and never reaches the browser.
+
+The only long-lived state is a 60-second in-process cache of completed reports,
+which is purely an optimisation — nothing breaks when it is cold, which is why
+no database is needed.
+
+---
 
 ## Project description (hackathon submission)
 
-**Solana Risk Radar** is a token risk-analysis tool for the Solana ecosystem.
-Paste a mint address and get a deterministic, explainable risk score in
-seconds — backed by real on-chain data (mint/freeze authority, holder
-concentration) and real market data (liquidity, pool age, trading activity),
-never by an LLM's opinion. Every signal shows its exact observed value, its
-point contribution to the score, and raw evidence you can inspect. Built with
-Next.js, TypeScript, and Solana's web3.js, with zero required API keys and no
-database — a focused, transparent tool that helps users do their own research
-faster, not a black-box "safe/scam" verdict.
+**Solana Risk Radar** turns a token address into an explainable risk report in
+seconds. Paste a mint, and it reads real on-chain data (mint and freeze
+authority, Token-2022 transfer controls, metadata mutability, classified holder
+distribution) and real market data (liquidity depth, pool diversity, pool age,
+trading behaviour), then scores it with fourteen deterministic rules whose
+thresholds are published in full.
 
-## Scope & limitations
+The point is not the number — it is that the number is *auditable*. Every signal
+shows what was measured, what was found, how many points it contributed and
+why, and opens onto the raw evidence with links to the chain. Where data is
+missing it is excluded from the score rather than guessed at, and the tool never
+claims a token is safe or a scam. Built with Next.js and TypeScript, with no
+API keys, no accounts and no database.
 
-- This MVP focuses on the single-token analysis flow end to end, done well,
-  rather than breadth of features. See "Deliberately out of scope" in
-  `METHODOLOGY.md`.
-- Holder-concentration data quality depends on RPC provider (see above).
-- Market data (liquidity/volume/price) reflects whatever DexScreener has
-  indexed; extremely new or unlisted tokens may show "no pools found," which
-  is itself a meaningful risk signal, not a bug.
+---
+
+## Licence
+
+MIT

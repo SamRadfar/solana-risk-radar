@@ -6,7 +6,7 @@
  * (trust boundary) without shipping a crypto bundle to the client.
  */
 
-const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 const INDEX: Record<string, number> = (() => {
   const map: Record<string, number> = {};
@@ -14,13 +14,26 @@ const INDEX: Record<string, number> = (() => {
   return map;
 })();
 
-/** Decode a base58 string to bytes. Returns `null` for malformed input. */
+/**
+ * Decode a base58 string to bytes. Returns `null` for malformed input.
+ *
+ * Leading zero bytes are encoded in base58 as leading `1` characters and carry
+ * no numeric value, so they are counted separately and prepended afterwards.
+ * Folding them into the big-number accumulator instead would yield an extra
+ * byte for an all-zero value (a 33-byte result for the System Program address).
+ */
 export function decodeBase58(input: string): Uint8Array | null {
   if (input.length === 0) return null;
 
-  const bytes: number[] = [0];
-  for (const char of input) {
-    const value = INDEX[char];
+  let leadingZeros = 0;
+  while (leadingZeros < input.length && input[leadingZeros] === "1") {
+    leadingZeros += 1;
+  }
+
+  // Little-endian accumulator for the remaining, numerically significant part.
+  const bytes: number[] = [];
+  for (let index = leadingZeros; index < input.length; index += 1) {
+    const value = INDEX[input[index]];
     if (value === undefined) return null;
 
     let carry = value;
@@ -35,8 +48,12 @@ export function decodeBase58(input: string): Uint8Array | null {
     }
   }
 
-  // Each leading '1' in base58 represents one leading zero byte.
-  for (let i = 0; i < input.length && input[i] === '1'; i += 1) bytes.push(0);
+  // Any character before the first significant one must still be valid base58.
+  for (let index = 0; index < leadingZeros; index += 1) {
+    if (INDEX[input[index]] === undefined) return null;
+  }
+
+  for (let i = 0; i < leadingZeros; i += 1) bytes.push(0);
 
   return new Uint8Array(bytes.reverse());
 }
@@ -54,12 +71,12 @@ export function validateMintAddress(raw: string): AddressValidation {
   const address = raw.trim();
 
   if (address.length === 0) {
-    return { valid: false, reason: 'Enter a Solana token mint address.' };
+    return { valid: false, reason: "Enter a Solana token mint address." };
   }
   if (address.length < 32 || address.length > 44) {
     return {
       valid: false,
-      reason: 'A Solana address is 32–44 characters long.',
+      reason: "A Solana address is 32–44 characters long.",
     };
   }
 
@@ -67,11 +84,11 @@ export function validateMintAddress(raw: string): AddressValidation {
   if (decoded === null) {
     return {
       valid: false,
-      reason: 'Contains characters that are not valid base58 (no 0, O, I or l).',
+      reason: "Contains characters that are not valid base58 (no 0, O, I or l).",
     };
   }
   if (decoded.length !== 32) {
-    return { valid: false, reason: 'Not a valid 32-byte Solana public key.' };
+    return { valid: false, reason: "Not a valid 32-byte Solana public key." };
   }
 
   return { valid: true, address };

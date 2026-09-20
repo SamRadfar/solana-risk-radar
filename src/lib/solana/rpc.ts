@@ -1,4 +1,4 @@
-import 'server-only';
+import "server-only";
 
 /**
  * Minimal Solana JSON-RPC client with endpoint failover.
@@ -18,11 +18,11 @@ import 'server-only';
 
 const DEFAULT_ENDPOINTS = [
   // Serves getTokenLargestAccounts without an API key (verified).
-  'https://public.rpc.solanavibestation.com',
+  "https://public.rpc.solanavibestation.com",
   // Official public endpoint. Rate-limits account-scanning methods, but is a
   // reliable fallback for single-account reads.
-  'https://api.mainnet-beta.solana.com',
-  'https://rpc.solanatracker.io/public',
+  "https://api.mainnet-beta.solana.com",
+  "https://rpc.solanatracker.io/public",
 ];
 
 export function rpcEndpoints(): string[] {
@@ -41,7 +41,7 @@ export class RpcError extends Error {
     readonly code?: number,
   ) {
     super(message);
-    this.name = 'RpcError';
+    this.name = "RpcError";
   }
 }
 
@@ -62,11 +62,11 @@ async function callEndpoint<T>(
 
   try {
     const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
       signal: controller.signal,
-      cache: 'no-store',
+      cache: "no-store",
     });
 
     if (!response.ok) {
@@ -98,31 +98,55 @@ async function callEndpoint<T>(
   }
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Rate limiting is transient and worth waiting out; a bad request is not. */
+function isRetryable(error: unknown): boolean {
+  if (!(error instanceof RpcError)) return true; // transport/parse errors
+  if (error.code === 429) return true;
+  if (error.code !== undefined && error.code >= 500) return true;
+  return /rate|too many|timeout|non-JSON|empty result/i.test(error.message);
+}
+
 /**
  * Call a Solana RPC method, trying each endpoint in turn.
  *
- * A `null` result is a legitimate answer (for example, an account that does not
- * exist) so it is returned immediately rather than treated as a failure.
+ * Free public endpoints rate-limit the account-scanning methods hard, and a
+ * single analysis issues several calls in quick succession, so each endpoint
+ * gets a couple of attempts with backoff before moving on. Without this the
+ * first 429 would silently drop holder analysis from the report.
+ *
+ * A `null` result is a legitimate answer (an account that does not exist), so
+ * it is returned as-is rather than treated as a failure.
  */
 export async function rpcCall<T>(
   method: string,
   params: unknown[],
+  { attemptsPerEndpoint = 3 }: { attemptsPerEndpoint?: number } = {},
 ): Promise<T> {
   const endpoints = rpcEndpoints();
   const failures: string[] = [];
 
   for (const endpoint of endpoints) {
-    try {
-      return await callEndpoint<T>(endpoint, method, params);
-    } catch (error) {
-      const reason =
-        error instanceof Error ? error.message : 'unknown transport error';
-      failures.push(`${hostOf(endpoint)}: ${reason}`);
+    for (let attempt = 0; attempt < attemptsPerEndpoint; attempt += 1) {
+      try {
+        return await callEndpoint<T>(endpoint, method, params);
+      } catch (error) {
+        const reason =
+          error instanceof Error ? error.message : "unknown transport error";
+
+        if (!isRetryable(error) || attempt === attemptsPerEndpoint - 1) {
+          failures.push(`${hostOf(endpoint)}: ${reason}`);
+          break;
+        }
+        // 400ms, 1200ms — enough to clear a per-second bucket.
+        await sleep(400 * 3 ** attempt);
+      }
     }
   }
 
   throw new RpcError(
-    `Solana RPC method "${method}" failed on all ${endpoints.length} endpoints (${failures.join('; ')})`,
+    `Solana RPC method "${method}" failed on all ${endpoints.length} endpoints (${failures.join("; ")})`,
   );
 }
 
@@ -130,7 +154,7 @@ function hostOf(endpoint: string): string {
   try {
     return new URL(endpoint).host;
   } catch {
-    return 'invalid-endpoint';
+    return "invalid-endpoint";
   }
 }
 
@@ -157,7 +181,7 @@ export interface ParsedAccountData<TInfo> {
   space: number;
 }
 
-export type Base64AccountData = [string, 'base64'];
+export type Base64AccountData = [string, "base64"];
 
 export interface TokenLargestAccount {
   address: string;
@@ -177,34 +201,34 @@ export interface SignatureInfo {
 export function getAccountInfoParsed<TInfo>(
   address: string,
 ): Promise<RpcContextValue<RpcAccount<ParsedAccountData<TInfo>> | null>> {
-  return rpcCall('getAccountInfo', [address, { encoding: 'jsonParsed' }]);
+  return rpcCall("getAccountInfo", [address, { encoding: "jsonParsed" }]);
 }
 
 export function getAccountInfoBase64(
   address: string,
 ): Promise<RpcContextValue<RpcAccount<Base64AccountData> | null>> {
-  return rpcCall('getAccountInfo', [address, { encoding: 'base64' }]);
+  return rpcCall("getAccountInfo", [address, { encoding: "base64" }]);
 }
 
 export function getTokenLargestAccounts(
   mint: string,
 ): Promise<RpcContextValue<TokenLargestAccount[]>> {
-  return rpcCall('getTokenLargestAccounts', [mint]);
+  return rpcCall("getTokenLargestAccounts", [mint]);
 }
 
 export function getMultipleAccountsParsed<TInfo>(
   addresses: string[],
 ): Promise<RpcContextValue<(RpcAccount<ParsedAccountData<TInfo>> | null)[]>> {
-  return rpcCall('getMultipleAccounts', [addresses, { encoding: 'jsonParsed' }]);
+  return rpcCall("getMultipleAccounts", [addresses, { encoding: "jsonParsed" }]);
 }
 
 /** Account headers only — `dataSlice` keeps the response small. */
 export function getMultipleAccountOwners(
   addresses: string[],
 ): Promise<RpcContextValue<(RpcAccount<Base64AccountData> | null)[]>> {
-  return rpcCall('getMultipleAccounts', [
+  return rpcCall("getMultipleAccounts", [
     addresses,
-    { encoding: 'base64', dataSlice: { offset: 0, length: 0 } },
+    { encoding: "base64", dataSlice: { offset: 0, length: 0 } },
   ]);
 }
 
@@ -212,5 +236,5 @@ export function getSignaturesForAddress(
   address: string,
   options: { limit?: number; before?: string } = {},
 ): Promise<SignatureInfo[]> {
-  return rpcCall('getSignaturesForAddress', [address, { limit: 1000, ...options }]);
+  return rpcCall("getSignaturesForAddress", [address, { limit: 1000, ...options }]);
 }

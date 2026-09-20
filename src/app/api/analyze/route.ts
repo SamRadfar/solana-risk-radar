@@ -1,62 +1,160 @@
-import { NextRequest, NextResponse } from "next/server";
-import { validateSolanaAddress } from "@/lib/solana/validate";
-import { getMintInfo, NotAMintError, AccountNotFoundError } from "@/lib/solana/mint";
+import { NextResponse, type NextRequest } from "next/server";
+
+import { validateMintAddress } from "@/lib/solana/address";
+import {
+  AccountNotFoundError,
+  NotAMintError,
+  getMintInfo,
+} from "@/lib/solana/mint";
 import { getOnChainMetadata } from "@/lib/solana/metadata";
 import { getHolderData } from "@/lib/solana/holders";
-import { getMarketData } from "@/lib/providers/dexscreener";
+import { getTokenAge } from "@/lib/solana/age";
+import { hasPrivateEndpoint } from "@/lib/solana/rpc";
+import { getMarketData, marketCap, spotPrice } from "@/lib/providers/dexscreener";
 import { buildRiskReport } from "@/lib/risk-engine/engine";
-import type { TokenOverview } from "@/lib/risk-engine/types";
+import { getCached, setCached } from "@/lib/cache";
+import type {
+  DataSourceStatus,
+  RiskReport,
+  TokenOverview,
+} from "@/lib/risk-engine/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * The single analysis endpoint.
+ *
+ * All provider access lives on the server: RPC endpoints (and any configured
+ * private one) are never exposed to the browser, and every external response is
+ * treated as untrusted input before it reaches the risk engine.
+ */
 export async function GET(request: NextRequest) {
-  const address = request.nextUrl.searchParams.get("address") ?? "";
+  const started = Date.now();
+  const raw = request.nextUrl.searchParams.get("address") ?? "";
 
-  const validation = validateSolanaAddress(address);
-  if (!validation.valid || !validation.publicKey) {
-    return NextResponse.json({ error: validation.error ?? "Invalid address." }, { status: 400 });
+  const validation = validateMintAddress(raw);
+  if (!validation.valid) {
+    return NextResponse.json({ error: validation.reason }, { status: 400 });
   }
-  const mintKey = validation.publicKey;
-  const mintAddress = mintKey.toBase58();
+  const mintAddress = validation.address;
 
+  // A repeat lookup within the TTL is served from memory. Holder scanning is
+  // slow on public RPC, so this makes re-inspecting a token feel instant and
+  // avoids hammering a free endpoint.
+  const cached = getCached<RiskReport>(mintAddress);
+  if (cached) {
+    return NextResponse.json(cached, {
+      headers: { "Cache-Control": "private, max-age=15", "X-Cache": "hit" },
+    });
+  }
+
+  // The mint account gates everything else: without it there is nothing to
+  // analyse, and its decimals/supply are inputs to the other fetches.
   let mintInfo;
   try {
-    mintInfo = await getMintInfo(mintKey);
-  } catch (err) {
-    if (err instanceof NotAMintError) {
-      return NextResponse.json({ error: err.message }, { status: 422 });
+    mintInfo = await getMintInfo(mintAddress);
+  } catch (error) {
+    if (error instanceof NotAMintError) {
+      return NextResponse.json({ error: error.message }, { status: 422 });
     }
-    if (err instanceof AccountNotFoundError) {
-      return NextResponse.json({ error: err.message }, { status: 404 });
+    if (error instanceof AccountNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 404 });
     }
-    const message = err instanceof Error ? err.message : "Unknown error fetching mint account.";
     return NextResponse.json(
-      { error: `Failed to read mint account from Solana RPC: ${message}` },
+      {
+        error: `Could not read the mint account from any Solana RPC endpoint. ${
+          error instanceof Error ? error.message : ""
+        }`.trim(),
+      },
       { status: 502 },
     );
   }
 
-  const [onChainMetadata, holderData, marketData] = await Promise.all([
-    getOnChainMetadata(mintKey).catch(() => ({ name: null, symbol: null, uri: null })),
-    getHolderData(mintKey, mintInfo.supplyRaw),
+  // Independent lookups run concurrently. Each already degrades to an
+  // "unavailable" result internally, so one slow provider cannot fail the
+  // report — it only reduces coverage.
+  const [metadata, holderData, tokenAge, marketData] = await Promise.all([
+    getOnChainMetadata(mintInfo).catch(() => ({
+      name: null,
+      symbol: null,
+      uri: null,
+      updateAuthority: null,
+      isMutable: null,
+      source: "none" as const,
+      metadataAccount: null,
+    })),
+    getHolderData(mintInfo),
+    getTokenAge(mintAddress),
     getMarketData(mintAddress),
   ]);
 
   const overview: TokenOverview = {
     mint: mintAddress,
-    name: marketData.name ?? onChainMetadata.name,
-    symbol: marketData.symbol ?? onChainMetadata.symbol,
+    // On-chain metadata is authoritative for identity; the market aggregator is
+    // only a fallback for tokens whose metadata account is missing.
+    name: metadata.name ?? marketData.name,
+    symbol: metadata.symbol ?? marketData.symbol,
     decimals: mintInfo.decimals,
     supply: mintInfo.supplyRaw,
     supplyUi: mintInfo.supplyUi,
-    priceUsd: marketData.pairs.find((p) => p.priceUsd !== null)?.priceUsd ?? null,
+    supplyIsMeaningful: mintInfo.supplyIsMeaningful,
+    priceUsd: spotPrice(marketData),
+    marketCapUsd: marketCap(marketData),
     imageUrl: marketData.imageUrl,
+    tokenProgram: mintInfo.tokenProgram,
+    metadataSource: metadata.source,
+    websites: marketData.websites,
+    socials: marketData.socials,
   };
 
-  const report = buildRiskReport({ mint: mintAddress, mintInfo, holderData, marketData }, overview);
+  const sources: DataSourceStatus[] = [
+    {
+      name: "Solana RPC",
+      detail: hasPrivateEndpoint()
+        ? `Mint account read at slot ${mintInfo.slot} via the configured endpoint`
+        : `Mint account read at slot ${mintInfo.slot} via public endpoints`,
+      ok: true,
+    },
+    {
+      name: "Token holders",
+      detail: holderData.available
+        ? `${holderData.holders.length} largest accounts resolved and classified`
+        : (holderData.error ?? "Unavailable"),
+      ok: holderData.available,
+    },
+    {
+      name: "On-chain metadata",
+      detail:
+        metadata.source === "none"
+          ? "No metadata account found for this mint"
+          : `Read from ${metadata.source === "metaplex" ? "the Metaplex metadata account" : "the Token-2022 metadata extension"}`,
+      ok: metadata.source !== "none",
+    },
+    {
+      name: "DexScreener",
+      detail: marketData.available
+        ? `${marketData.pairs.length} pool${marketData.pairs.length === 1 ? "" : "s"} indexed`
+        : (marketData.error ?? "Unavailable"),
+      ok: marketData.available,
+    },
+    {
+      name: "Mint history",
+      detail: tokenAge.available
+        ? `${tokenAge.signaturesScanned} signatures scanned`
+        : (tokenAge.error ?? "Unavailable"),
+      ok: tokenAge.available,
+    },
+  ];
+
+  const report = buildRiskReport(
+    { mint: mintAddress, mintInfo, metadata, holderData, tokenAge, marketData },
+    { overview, sources, elapsedMs: Date.now() - started },
+  );
+
+  setCached(mintAddress, report);
 
   return NextResponse.json(report, {
-    headers: { "Cache-Control": "private, max-age=15" },
+    headers: { "Cache-Control": "private, max-age=15", "X-Cache": "miss" },
   });
 }

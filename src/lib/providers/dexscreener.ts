@@ -3,17 +3,28 @@
  * Docs: https://docs.dexscreener.com/api/reference
  *
  * This is the sole market-data provider today. It is isolated behind this
- * module (and the MarketData shape below) so it can be swapped for another
- * aggregator (e.g. Birdeye, GeckoTerminal) without touching the risk engine.
+ * module (and the `MarketData` shape below) so it can be swapped for another
+ * aggregator (GeckoTerminal, Birdeye, Jupiter) without touching the risk
+ * engine: rules depend only on `MarketData`, never on DexScreener's wire
+ * format.
  */
 
 export interface MarketPair {
   dexId: string;
+  pairAddress: string | null;
+  /** Ticker of the other side of the pair, e.g. "SOL" or "USDC". */
+  quoteSymbol: string | null;
   liquidityUsd: number;
   volume24hUsd: number;
   priceUsd: number | null;
-  pairCreatedAt: number | null; // ms epoch
+  /** ms epoch */
+  pairCreatedAt: number | null;
   fdv: number | null;
+  marketCap: number | null;
+  priceChange24h: number | null;
+  buys24h: number;
+  sells24h: number;
+  url: string | null;
 }
 
 export interface MarketData {
@@ -22,6 +33,8 @@ export interface MarketData {
   name: string | null;
   symbol: string | null;
   imageUrl: string | null;
+  websites: string[];
+  socials: string[];
   error?: string;
 }
 
@@ -32,70 +45,180 @@ interface DexScreenerToken {
 }
 
 interface DexScreenerPair {
-  dexId: string;
-  baseToken: DexScreenerToken;
-  quoteToken: DexScreenerToken;
+  dexId?: string;
+  pairAddress?: string;
+  url?: string;
+  baseToken?: DexScreenerToken;
+  quoteToken?: DexScreenerToken;
   priceUsd?: string;
+  priceChange?: { h24?: number };
+  txns?: { h24?: { buys?: number; sells?: number } };
   liquidity?: { usd?: number };
   volume?: { h24?: number };
   pairCreatedAt?: number;
   fdv?: number;
-  info?: { imageUrl?: string };
+  marketCap?: number;
+  info?: {
+    imageUrl?: string;
+    websites?: { url?: string }[];
+    socials?: { url?: string }[];
+  };
 }
 
 interface DexScreenerResponse {
   pairs: DexScreenerPair[] | null;
 }
 
+const ENDPOINT = "https://api.dexscreener.com/latest/dex/tokens";
+const TIMEOUT_MS = 10_000;
+
+const EMPTY = (
+  overrides: Partial<MarketData> & Pick<MarketData, "available">,
+): MarketData => ({
+  pairs: [],
+  name: null,
+  symbol: null,
+  imageUrl: null,
+  websites: [],
+  socials: [],
+  ...overrides,
+});
+
+/** Coerce an untrusted numeric field into a finite number, or null. */
+function num(value: unknown): number | null {
+  const parsed = typeof value === "string" ? Number(value) : value;
+  return typeof parsed === "number" && Number.isFinite(parsed) ? parsed : null;
+}
+
 export async function getMarketData(mintAddress: string): Promise<MarketData> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10_000);
-    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mintAddress}`, {
+    const response = await fetch(`${ENDPOINT}/${encodeURIComponent(mintAddress)}`, {
       signal: controller.signal,
       headers: { Accept: "application/json" },
+      cache: "no-store",
     });
-    clearTimeout(timer);
 
-    if (!res.ok) {
-      return { available: false, pairs: [], name: null, symbol: null, imageUrl: null, error: `DexScreener HTTP ${res.status}` };
+    if (!response.ok) {
+      return EMPTY({
+        available: false,
+        error: `DexScreener returned HTTP ${response.status}.`,
+      });
     }
 
-    const json = (await res.json()) as DexScreenerResponse;
-    if (!json.pairs || json.pairs.length === 0) {
-      return { available: true, pairs: [], name: null, symbol: null, imageUrl: null };
-    }
+    const json = (await response.json()) as DexScreenerResponse;
+    const rawPairs = Array.isArray(json.pairs) ? json.pairs : [];
 
-    // DexScreener's priceUsd/baseToken fields describe the BASE token of each
-    // pair. Our mint can appear on either side, so only trust those fields
-    // for pairs where our mint is actually the base token — otherwise
-    // liquidity/volume still apply (pair-wide) but the price would be wrong.
-    const isMintBase = (p: DexScreenerPair) => p.baseToken?.address === mintAddress;
+    // "No pools" is a successful answer, and a meaningful risk signal itself.
+    if (rawPairs.length === 0) return EMPTY({ available: true });
 
-    const pairs: MarketPair[] = json.pairs
-      .filter((p) => p.dexId)
-      .map((p) => ({
-        dexId: p.dexId,
-        liquidityUsd: p.liquidity?.usd ?? 0,
-        volume24hUsd: p.volume?.h24 ?? 0,
-        priceUsd: isMintBase(p) && p.priceUsd ? Number(p.priceUsd) : null,
-        pairCreatedAt: p.pairCreatedAt ?? null,
-        fdv: isMintBase(p) ? (p.fdv ?? null) : null,
-      }));
+    /**
+     * DexScreener's `baseToken`, `priceUsd`, `fdv` and `marketCap` all describe
+     * the BASE token of each pair. The queried mint can appear on either side,
+     * so those fields are only trusted for pairs where it is actually the base
+     * token — otherwise a token gets silently labelled with its counterparty's
+     * name (querying USDC once returned a pair labelled "Pump").
+     *
+     * Pair-wide fields (liquidity, volume, pool age) are valid either way.
+     */
+    const isMintBase = (pair: DexScreenerPair) =>
+      pair.baseToken?.address === mintAddress;
 
-    const richest = [...json.pairs]
+    const pairs: MarketPair[] = rawPairs.map((pair) => {
+      const mintIsBase = isMintBase(pair);
+      return {
+        dexId: pair.dexId ?? "unknown",
+        pairAddress: pair.pairAddress ?? null,
+        quoteSymbol:
+          (mintIsBase ? pair.quoteToken?.symbol : pair.baseToken?.symbol) ?? null,
+        liquidityUsd: num(pair.liquidity?.usd) ?? 0,
+        volume24hUsd: num(pair.volume?.h24) ?? 0,
+        priceUsd: mintIsBase ? num(pair.priceUsd) : null,
+        pairCreatedAt: num(pair.pairCreatedAt),
+        fdv: mintIsBase ? num(pair.fdv) : null,
+        marketCap: mintIsBase ? num(pair.marketCap) : null,
+        priceChange24h: mintIsBase ? num(pair.priceChange?.h24) : null,
+        buys24h: num(pair.txns?.h24?.buys) ?? 0,
+        sells24h: num(pair.txns?.h24?.sells) ?? 0,
+        url: pair.url ?? null,
+      };
+    });
+
+    // Identity comes from the deepest pool in which the mint is the base token.
+    const identityPair = rawPairs
       .filter(isMintBase)
-      .sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0))[0];
+      .sort((a, b) => (num(b.liquidity?.usd) ?? 0) - (num(a.liquidity?.usd) ?? 0))[0];
 
     return {
       available: true,
       pairs,
-      name: richest?.baseToken?.name ?? null,
-      symbol: richest?.baseToken?.symbol ?? null,
-      imageUrl: richest?.info?.imageUrl ?? null,
+      name: identityPair?.baseToken?.name ?? null,
+      symbol: identityPair?.baseToken?.symbol ?? null,
+      imageUrl: identityPair?.info?.imageUrl ?? null,
+      websites: collectUrls(identityPair?.info?.websites),
+      socials: collectUrls(identityPair?.info?.socials),
     };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return { available: false, pairs: [], name: null, symbol: null, imageUrl: null, error: message };
+  } catch (error) {
+    const aborted = error instanceof Error && error.name === "AbortError";
+    return EMPTY({
+      available: false,
+      error: aborted
+        ? `DexScreener did not respond within ${TIMEOUT_MS / 1000}s.`
+        : error instanceof Error
+          ? error.message
+          : "Unknown error contacting DexScreener.",
+    });
+  } finally {
+    clearTimeout(timer);
   }
+}
+
+/** External API content is untrusted: keep only well-formed http(s) URLs. */
+function collectUrls(entries: { url?: string }[] | undefined): string[] {
+  if (!Array.isArray(entries)) return [];
+  return entries
+    .map((entry) => entry?.url)
+    .filter((url): url is string => typeof url === "string")
+    .filter((url) => {
+      try {
+        const { protocol } = new URL(url);
+        return protocol === "https:" || protocol === "http:";
+      } catch {
+        return false;
+      }
+    })
+    .slice(0, 8);
+}
+
+// ---------------------------------------------------------------------------
+// Aggregates shared by several rules, so each computes them the same way.
+// ---------------------------------------------------------------------------
+
+export function totalLiquidity(market: MarketData): number {
+  return market.pairs.reduce((sum, pair) => sum + pair.liquidityUsd, 0);
+}
+
+export function totalVolume24h(market: MarketData): number {
+  return market.pairs.reduce((sum, pair) => sum + pair.volume24hUsd, 0);
+}
+
+/** Deepest pool first. */
+export function pairsByLiquidity(market: MarketData): MarketPair[] {
+  return [...market.pairs].sort((a, b) => b.liquidityUsd - a.liquidityUsd);
+}
+
+/** Best available market capitalisation, preferring circulating over fully diluted. */
+export function marketCap(market: MarketData): number | null {
+  for (const pair of pairsByLiquidity(market)) {
+    if (pair.marketCap !== null && pair.marketCap > 0) return pair.marketCap;
+    if (pair.fdv !== null && pair.fdv > 0) return pair.fdv;
+  }
+  return null;
+}
+
+/** Spot price from the deepest pool that reports one. */
+export function spotPrice(market: MarketData): number | null {
+  return pairsByLiquidity(market).find((pair) => pair.priceUsd !== null)?.priceUsd ?? null;
 }

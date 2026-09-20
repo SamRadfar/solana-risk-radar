@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
+
 import TokenInputForm from "@/components/TokenInputForm";
 import ReportView from "@/components/ReportView";
 import type { RiskReport } from "@/lib/risk-engine/types";
@@ -17,29 +18,38 @@ export default function Home() {
   const analyze = useCallback(async (address: string) => {
     setState({ kind: "loading" });
     try {
-      const res = await fetch(`/api/analyze?address=${encodeURIComponent(address)}`);
-      const json = await res.json();
-      if (!res.ok) {
-        setState({ kind: "error", message: json.error ?? "Something went wrong." });
+      const response = await fetch(
+        `/api/analyze?address=${encodeURIComponent(address)}`,
+      );
+      const payload = await response.json();
+
+      if (!response.ok) {
+        setState({
+          kind: "error",
+          message:
+            typeof payload?.error === "string"
+              ? payload.error
+              : "The analysis service returned an unexpected response.",
+        });
         return;
       }
-      setState({ kind: "result", report: json as RiskReport });
+
+      setState({ kind: "result", report: payload as RiskReport });
     } catch {
-      setState({ kind: "error", message: "Network error — could not reach the analysis service." });
+      setState({
+        kind: "error",
+        message:
+          "Could not reach the analysis service. Check your connection and try again.",
+      });
     }
   }, []);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen flex flex-col">
       <header className="border-b" style={{ borderColor: "var(--border)" }}>
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-5 flex items-center gap-3">
-          <div
-            className="h-8 w-8 rounded-lg flex items-center justify-center font-bold text-sm"
-            style={{ background: "var(--accent)", color: "#06231f" }}
-          >
-            R
-          </div>
-          <div>
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-3">
+          <RadarMark />
+          <div className="min-w-0">
             <h1 className="font-semibold text-[15px] leading-tight">Solana Risk Radar</h1>
             <p className="text-xs leading-tight" style={{ color: "var(--muted)" }}>
               Deterministic risk signals, not predictions
@@ -48,80 +58,127 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
+      <main className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
         {state.kind !== "result" && (
-          <div className="text-center mb-10 max-w-2xl mx-auto">
-            <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight text-balance">
-              Understand a Solana token&apos;s risk in seconds
+          <div className="text-center max-w-2xl mx-auto mb-8">
+            <h2 className="text-3xl sm:text-[2.5rem] font-semibold tracking-tight leading-[1.1]">
+              Understand a Solana token&rsquo;s risk in seconds
             </h2>
-            <p className="mt-3 text-base sm:text-lg text-balance" style={{ color: "var(--muted)" }}>
-              Paste a mint address. We pull real on-chain and market data, run it through a transparent scoring
-              engine, and show you exactly which signals drove the result.
+            <p
+              className="mt-3.5 text-base sm:text-lg leading-relaxed"
+              style={{ color: "var(--muted-strong)" }}
+            >
+              Paste a mint address. Risk Radar reads real on-chain and market data, scores it
+              with a transparent rule engine, and shows you exactly which signals drove the
+              result &mdash; with the evidence behind every one.
             </p>
           </div>
         )}
 
         <TokenInputForm onAnalyze={analyze} loading={state.kind === "loading"} />
 
-        <div className="mt-10">
+        <div className="mt-8">
+          {state.kind === "idle" && <EmptyState />}
           {state.kind === "loading" && <LoadingState />}
           {state.kind === "error" && <ErrorState message={state.message} />}
           {state.kind === "result" && <ReportView report={state.report} />}
-          {state.kind === "idle" && <EmptyState />}
         </div>
       </main>
 
-      <footer className="max-w-4xl mx-auto px-4 sm:px-6 py-8 text-center text-xs" style={{ color: "var(--muted)" }}>
-        Data from Solana RPC, on-chain Metaplex metadata, and DexScreener. Built for the Superteam Germany Road to
-        Colosseum Hackathon.
+      <footer
+        className="max-w-4xl mx-auto w-full px-4 sm:px-6 py-8 text-xs text-center leading-relaxed"
+        style={{ color: "var(--muted)" }}
+      >
+        On-chain data from Solana RPC and the Metaplex / Token-2022 metadata standards.
+        Market data from DexScreener. No API keys, no account, no tracking.
+        <br />
+        Built for the Superteam Germany Road to Colosseum Hackathon.
       </footer>
     </div>
   );
 }
 
-function EmptyState() {
-  const points = [
-    ["Mint & freeze authority", "Can the deployer mint more tokens or freeze your wallet?"],
-    ["Holder concentration", "How much of supply sits in the largest accounts?"],
-    ["Liquidity & pool maturity", "Is there a real, aged market to trade against?"],
-    ["Trading activity", "Is volume healthy, dead, or suspiciously high?"],
-  ];
+function RadarMark() {
   return (
-    <div className="grid sm:grid-cols-2 gap-3">
-      {points.map(([title, desc]) => (
-        <div
-          key={title}
-          className="rounded-xl border p-4"
-          style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-        >
-          <h3 className="font-medium text-sm">{title}</h3>
-          <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-            {desc}
-          </p>
-        </div>
-      ))}
+    <div
+      className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0"
+      style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
+      aria-hidden="true"
+    >
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+        <circle cx="9" cy="9" r="7" stroke="var(--border-strong)" strokeWidth="1.2" />
+        <circle cx="9" cy="9" r="3.5" stroke="var(--border-strong)" strokeWidth="1.2" />
+        <path d="M9 9L14 5.5" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" />
+        <circle cx="9" cy="9" r="1.3" fill="var(--accent)" />
+      </svg>
+    </div>
+  );
+}
+
+function EmptyState() {
+  const checks = [
+    ["Authorities", "Can supply still be minted, wallets frozen, or transfers intercepted?"],
+    ["Holders", "How much of the sellable supply sits in the largest wallets?"],
+    ["Liquidity", "Is there a real market deep enough to exit into?"],
+    ["Market activity", "Is trading healthy, dormant, or suspiciously inflated?"],
+    ["Maturity", "How long have the token and its market actually existed?"],
+  ];
+
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-[0.14em] mb-3" style={{ color: "var(--muted)" }}>
+        What gets checked
+      </p>
+      <div className="grid sm:grid-cols-2 gap-3">
+        {checks.map(([title, description]) => (
+          <div
+            key={title}
+            className="rounded-xl border p-4"
+            style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+          >
+            <h3 className="font-medium text-sm">{title}</h3>
+            <p className="text-sm mt-1 leading-relaxed" style={{ color: "var(--muted)" }}>
+              {description}
+            </p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 function LoadingState() {
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border p-8 animate-pulse" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-        <div className="flex gap-6 items-center">
-          <div className="h-36 w-36 rounded-full shrink-0" style={{ background: "var(--surface-2)" }} />
+    <div className="space-y-4" role="status" aria-live="polite">
+      <span className="sr-only">Analysing token…</span>
+
+      <div
+        className="rounded-2xl border p-5 sm:p-7"
+        style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+      >
+        <div className="flex flex-col sm:flex-row gap-6 sm:gap-8 sm:items-center">
+          <div
+            className="h-[168px] w-[168px] rounded-full shrink-0 animate-shimmer"
+            style={{ background: "var(--surface-2)" }}
+          />
           <div className="flex-1 space-y-3">
-            <div className="h-5 w-48 rounded" style={{ background: "var(--surface-2)" }} />
-            <div className="h-4 w-64 rounded" style={{ background: "var(--surface-2)" }} />
-            <div className="h-6 w-40 rounded-full" style={{ background: "var(--surface-2)" }} />
+            <div className="h-6 w-44 rounded animate-shimmer" style={{ background: "var(--surface-2)" }} />
+            <div className="h-5 w-56 rounded animate-shimmer" style={{ background: "var(--surface-2)" }} />
+            <div className="h-4 w-full max-w-md rounded animate-shimmer" style={{ background: "var(--surface-2)" }} />
+            <p className="text-xs pt-1" style={{ color: "var(--muted)" }}>
+              Reading the mint account, resolving top holders, and pulling market data…
+              <br />
+              Holder scans can take a few seconds on public RPC endpoints.
+            </p>
           </div>
         </div>
       </div>
+
       <div className="grid sm:grid-cols-2 gap-3">
-        {Array.from({ length: 4 }).map((_, i) => (
+        {Array.from({ length: 4 }).map((_, index) => (
           <div
-            key={i}
-            className="h-28 rounded-xl border animate-pulse"
+            key={index}
+            className="h-32 rounded-xl border animate-shimmer"
             style={{ borderColor: "var(--border)", background: "var(--surface)" }}
           />
         ))}
@@ -133,11 +190,14 @@ function LoadingState() {
 function ErrorState({ message }: { message: string }) {
   return (
     <div
-      className="rounded-xl border p-5 text-sm"
-      style={{ borderColor: "#f8514955", background: "rgba(248,81,73,0.08)", color: "#f85149" }}
+      className="rounded-xl border p-5"
+      style={{ borderColor: "rgba(229,72,77,0.4)", background: "rgba(229,72,77,0.07)" }}
+      role="alert"
     >
-      <strong>Couldn&apos;t analyze this address.</strong>
-      <p className="mt-1" style={{ color: "var(--foreground)", opacity: 0.85 }}>
+      <strong className="text-sm" style={{ color: "#e5484d" }}>
+        Could not analyse this address
+      </strong>
+      <p className="mt-1.5 text-sm leading-relaxed" style={{ color: "var(--muted-strong)" }}>
         {message}
       </p>
     </div>
