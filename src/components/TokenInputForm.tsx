@@ -10,11 +10,12 @@ interface Props {
   /** Compact variant used once a report is on screen. */
   compact?: boolean;
   /**
-   * Renders the field as a recessed well rather than a raised card, for use
-   * inside another surface (the landing analyser panel). Defaults to false, so
-   * every existing call site is unaffected.
+   * Renders the field as a frosted glass element rather than a solid card —
+   * translucent, lightly blurred, with a hairline edge, in the spirit of the
+   * small badges elsewhere in the hero. For use on the landing analyser.
+   * Defaults to false, so every existing call site is unaffected.
    */
-  inset?: boolean;
+  glass?: boolean;
   /**
    * Stacks the field above a full-width action instead of placing them on one
    * row. The row layout keys off *viewport* breakpoints, which misreads a
@@ -43,7 +44,7 @@ export default function TokenInputForm({
   onAnalyze,
   loading,
   compact = false,
-  inset = false,
+  glass = false,
   stack = false,
 }: Props) {
   const [value, setValue] = useState("");
@@ -85,16 +86,36 @@ export default function TokenInputForm({
         }}
       >
         <div
-          className={`${inset ? "inset" : "card"} flex ${
+          className={`${glass ? "" : "card"} flex ${
             stack ? "flex-col" : "flex-col sm:flex-row"
           } gap-2 p-2 transition-colors`}
-          style={{
-            borderColor: showError
-              ? "rgba(229,72,77,0.5)"
-              : focused
-                ? "var(--line-accent)"
-                : undefined,
-          }}
+          style={
+            glass
+              ? {
+                  // Frosted, not filled: light enough that the hero's ambient
+                  // gradient still reads through the field.
+                  background: showError
+                    ? "rgba(229,72,77,0.07)"
+                    : "rgba(255,255,255,0.045)",
+                  border: `1px solid ${
+                    showError
+                      ? "rgba(229,72,77,0.45)"
+                      : focused
+                        ? "rgba(56,214,236,0.42)"
+                        : "rgba(255,255,255,0.10)"
+                  }`,
+                  borderRadius: 18,
+                  backdropFilter: "blur(16px) saturate(150%)",
+                  WebkitBackdropFilter: "blur(16px) saturate(150%)",
+                }
+              : {
+                  borderColor: showError
+                    ? "rgba(229,72,77,0.5)"
+                    : focused
+                      ? "var(--line-accent)"
+                      : undefined,
+                }
+          }
         >
           <div className="flex items-center gap-2.5 flex-1 min-w-0 pl-3">
             <span aria-hidden="true" className="shrink-0" style={{ color: "var(--ink-faint)" }}>
