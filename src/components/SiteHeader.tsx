@@ -7,14 +7,16 @@ import styles from "./SiteHeader.module.css";
 /**
  * The site header.
  *
- * Adapts to application state rather than being two components: on the landing
- * it points at the one real landing section and offers "Analyse token"; once a
- * report exists it points at the report's own sections and offers "Analyse
- * another token".
+ * Adapts to application state rather than being two components: the landing
+ * carries no section links at all, while a report exposes its own sections.
  *
  * Navigation only ever links to anchors that actually exist in the DOM. There
  * is no "How it works" or "Methodology" entry because the app has no such
  * section or route — inventing them would be navigation that lies.
+ *
+ * The one standing action is the scoring explainer, which is why the header
+ * does not also offer to analyse a token: the analyser is already the centre
+ * of the landing page, and the report has its own way back to it.
  */
 
 interface NavItem {
@@ -22,15 +24,33 @@ interface NavItem {
   id: string;
 }
 
-/* The landing renders exactly one section besides the hero. */
-const LANDING_NAV: NavItem[] = [{ label: "Signals", id: "what-gets-checked" }];
+/*
+ * The landing has no nav items. Its only section besides the hero is the one
+ * the scoring CTA already leads to, and listing it twice would be two links to
+ * the same place.
+ */
+const LANDING_NAV: NavItem[] = [];
 
-/* All three are rendered unconditionally by ReportView. */
+/*
+ * Both are rendered unconditionally by ReportView. "Profile" is deliberately
+ * absent: it is the category breakdown, which is exactly where the scoring CTA
+ * goes, so a nav entry for it would be the same redundancy.
+ */
 const RESULT_NAV: NavItem[] = [
   { label: "Verdict", id: "verdict" },
-  { label: "Profile", id: "profile" },
   { label: "Sources", id: "sources" },
 ];
+
+/*
+ * Where "How scoring works" leads, per state. Neither is a new section: the
+ * landing's signal lanes name the five dimensions and the 14 signals, and the
+ * report's category profile shows how each one was weighted and charged. The
+ * CTA connects the existing explanations rather than adding a page.
+ */
+const SCORING_TARGET: Record<"landing" | "result", string> = {
+  landing: "what-gets-checked",
+  result: "profile",
+};
 
 export default function SiteHeader({
   mode,
@@ -42,6 +62,7 @@ export default function SiteHeader({
   const scrolled = useScrolled(6);
   const nav = mode === "landing" ? LANDING_NAV : RESULT_NAV;
   const canReset = mode === "result";
+  const scoringTarget = SCORING_TARGET[mode];
 
   return (
     <header
@@ -64,21 +85,25 @@ export default function SiteHeader({
           </div>
         )}
 
-        <nav className={styles.nav} aria-label="Primary">
-          {nav.map((item) => (
-            <a
-              key={item.id}
-              href={`#${item.id}`}
-              className={styles.navLink}
-              onClick={(event) => {
-                event.preventDefault();
-                scrollToId(item.id);
-              }}
-            >
-              {item.label}
-            </a>
-          ))}
-        </nav>
+        {/* Rendered only when there is something to list, so the landing does
+            not carry an empty element and its flex gap. */}
+        {nav.length > 0 && (
+          <nav className={styles.nav} aria-label="Primary">
+            {nav.map((item) => (
+              <a
+                key={item.id}
+                href={`#${item.id}`}
+                className={styles.navLink}
+                onClick={(event) => {
+                  event.preventDefault();
+                  scrollToId(item.id);
+                }}
+              >
+                {item.label}
+              </a>
+            ))}
+          </nav>
+        )}
 
         <div className={styles.spacer} />
 
@@ -100,9 +125,24 @@ export default function SiteHeader({
           </span>
         </div>
 
-        <button type="button" className={styles.cta} onClick={focusAnalyser}>
-          {mode === "landing" ? "Analyse token" : "Analyse another token"}
-        </button>
+        {/*
+          A link, not a button: it navigates to an explanation that exists in
+          the page, so it behaves like one — and it is deliberately quieter
+          than the analyser it sits above.
+        */}
+        <a
+          href={`#${scoringTarget}`}
+          className={styles.cta}
+          onClick={(event) => {
+            event.preventDefault();
+            scrollToId(scoringTarget);
+          }}
+        >
+          How scoring works
+          <span className={styles.ctaArrow} aria-hidden="true">
+            &rarr;
+          </span>
+        </a>
       </div>
     </header>
   );
@@ -170,17 +210,6 @@ function scrollToId(id: string) {
 
   const top = element.getBoundingClientRect().top + window.scrollY - headerHeight - 20;
   window.scrollTo({ top, behavior: prefersReducedMotion() ? "auto" : "smooth" });
-}
-
-/** Brings the analyser into view and puts the caret in it. */
-function focusAnalyser() {
-  const input = document.getElementById("mint-address");
-  if (!input) return;
-
-  const reduce = prefersReducedMotion();
-  input.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
-  // Focus once the smooth scroll has settled, so focusing does not fight it.
-  window.setTimeout(() => input.focus({ preventScroll: true }), reduce ? 0 : 420);
 }
 
 /**

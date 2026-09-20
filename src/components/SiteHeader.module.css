@@ -217,29 +217,50 @@
    CTA
 -------------------------------------------------------------------------- */
 
+/*
+ * Glass, not a gradient slab. This is product navigation — it leads to the
+ * scoring explanation — so it stays a step below the analyser in weight: a
+ * hairline border, a barely-there cyan/indigo tint, and no glow. The accent
+ * arrives on hover rather than sitting on the page demanding attention.
+ */
 .cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-size: 13px;
-  font-weight: 600;
-  padding: 9px 15px;
-  border-radius: 10px;
+  font-weight: 500;
+  padding: 8px 13px;
+  border-radius: 9px;
   white-space: nowrap;
-  cursor: pointer;
-  color: var(--accent-ink);
-  background: var(--accent-grad-btn);
-  box-shadow: 0 6px 20px -12px var(--accent-glow);
+  color: var(--ink-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  background:
+    linear-gradient(120deg, rgba(56, 214, 236, 0.07), rgba(99, 102, 241, 0.06)),
+    rgba(255, 255, 255, 0.025);
+  /* Prefixed first, standard last — see the note on .header. */
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   transition:
-    filter 0.2s ease,
-    box-shadow 0.2s ease,
-    transform 0.12s ease;
+    color 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
 }
 
 .cta:hover {
-  filter: brightness(1.07);
-  box-shadow: 0 10px 26px -12px var(--accent-glow);
+  color: var(--ink);
+  border-color: rgba(56, 214, 236, 0.34);
+  background:
+    linear-gradient(120deg, rgba(56, 214, 236, 0.13), rgba(99, 102, 241, 0.1)),
+    rgba(255, 255, 255, 0.045);
 }
 
-.cta:active {
-  transform: translateY(1px);
+.ctaArrow {
+  color: var(--accent);
+  transition: transform 0.2s ease;
+}
+
+.cta:hover .ctaArrow {
+  transform: translateX(2px);
 }
 
 /* --------------------------------------------------------------------------
@@ -290,6 +311,7 @@
   .header::after,
   .navLink,
   .cta,
+  .ctaArrow,
   .brand {
     transition: none;
   }
