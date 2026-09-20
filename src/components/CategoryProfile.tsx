@@ -1,14 +1,13 @@
 import type { CategoryScore } from "@/lib/risk-engine/types";
-import { scoreColor } from "@/lib/severity";
+import { scoreColor, scoreMeta } from "@/lib/severity";
 
 /**
  * The token's risk profile across categories.
  *
  * The reader's job here is to compare magnitudes across five named categories,
- * which is a bar chart's job — a radar/spider plot would distort area, depend
- * on arbitrary axis order, and make precise comparison harder, all to look
- * more impressive. Bars are read accurately at a glance, which is the whole
- * point of the five-second promise.
+ * which is a bar chart's job — a radar plot would distort area, depend on
+ * arbitrary axis order and make precise comparison harder, all to look more
+ * impressive. Bars are read accurately at a glance, which is the point.
  *
  * Magnitude is carried by bar length (a non-colour channel); colour only
  * reinforces it, and every row is labelled with its exact value.
@@ -19,45 +18,44 @@ export default function CategoryProfile({
   categories: CategoryScore[];
 }) {
   return (
-    <section
-      className="rounded-2xl border p-5 sm:p-6"
-      style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-      aria-labelledby="risk-profile-heading"
-    >
-      <div className="flex items-baseline justify-between gap-3 flex-wrap">
-        <h3 id="risk-profile-heading" className="text-sm font-semibold">
-          Risk profile by category
-        </h3>
-        <p className="text-xs" style={{ color: "var(--muted)" }}>
-          Share of each category&rsquo;s measurable weight that was charged
+    <section id="profile" className="anchor card card-lit p-5 sm:p-6">
+      <header className="flex items-baseline justify-between gap-3 flex-wrap">
+        <h3 className="text-[15px] font-semibold">Risk profile by category</h3>
+        <p className="text-xs" style={{ color: "var(--ink-muted)" }}>
+          Equal weight · share of each category&rsquo;s measurable weight charged
         </p>
-      </div>
+      </header>
 
-      <ul className="mt-5 space-y-3.5">
+      <ul className="mt-5 space-y-4">
         {categories.map((category) => {
           const measured = category.percent !== null;
           const percent = category.percent ?? 0;
-          const color = measured ? scoreColor(percent) : "var(--muted)";
+          const color = measured ? scoreColor(percent) : "var(--ink-faint)";
+          const meta = measured ? scoreMeta(percent) : null;
 
           return (
-            <li key={category.category} className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1.5">
-              <div className="flex items-baseline gap-2 min-w-0">
-                <span className="text-sm truncate">{category.category}</span>
-                <span className="text-[11px] shrink-0" style={{ color: "var(--muted)" }}>
-                  {category.signalCount} signal{category.signalCount === 1 ? "" : "s"}
+            <li key={category.category}>
+              <div className="flex items-baseline justify-between gap-3 mb-2">
+                <div className="flex items-baseline gap-2.5 min-w-0">
+                  <span className="text-sm font-medium truncate">{category.category}</span>
+                  <span
+                    className="text-[11px] shrink-0"
+                    style={{ color: "var(--ink-faint)" }}
+                  >
+                    {category.signalCount} signal{category.signalCount === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <span
+                  className="tnum text-sm font-semibold shrink-0"
+                  style={{ color: measured ? color : "var(--ink-muted)" }}
+                >
+                  {measured ? `${percent}%` : "not measured"}
                 </span>
               </div>
 
-              <span
-                className="tnum text-sm font-medium text-right"
-                style={{ color: measured ? color : "var(--muted)" }}
-              >
-                {measured ? `${percent}%` : "not measured"}
-              </span>
-
               <div
-                className="col-span-2 h-2 rounded-full overflow-hidden"
-                style={{ background: "var(--surface-3)" }}
+                className="relative h-2.5 rounded-full overflow-hidden"
+                style={{ background: "rgba(255,255,255,0.05)" }}
                 role="img"
                 aria-label={
                   measured
@@ -65,13 +63,24 @@ export default function CategoryProfile({
                     : `${category.category}: not measured`
                 }
               >
-                {measured && (
+                {/* Quartile reference marks — turns a bar into a scale. */}
+                {[25, 50, 75].map((mark) => (
+                  <span
+                    key={mark}
+                    aria-hidden="true"
+                    className="absolute top-0 bottom-0 w-px"
+                    style={{ left: `${mark}%`, background: "rgba(255,255,255,0.07)" }}
+                  />
+                ))}
+
+                {measured && percent > 0 && (
                   <div
-                    className="h-full rounded-full"
+                    className="absolute inset-y-0 left-0 rounded-full"
                     style={{
-                      width: `${Math.max(percent, percent > 0 ? 1.5 : 0)}%`,
-                      background: color,
-                      transition: "width 0.9s cubic-bezier(0.16,1,0.3,1)",
+                      width: `${Math.max(percent, 1.5)}%`,
+                      background: `linear-gradient(90deg, ${color}66 0%, ${color} 100%)`,
+                      boxShadow: meta ? `0 0 12px -2px ${meta.glow}` : undefined,
+                      transition: "width 1s cubic-bezier(0.16,1,0.3,1)",
                     }}
                   />
                 )}
@@ -80,6 +89,14 @@ export default function CategoryProfile({
           );
         })}
       </ul>
+
+      <p
+        className="mt-5 pt-4 text-[11px] leading-relaxed"
+        style={{ borderTop: "1px solid var(--line)", color: "var(--ink-faint)" }}
+      >
+        Categories combine as a quadratic mean, not an average — clean dimensions cannot
+        cancel out severe ones. One fully compromised category scores 45; two score 63.
+      </p>
     </section>
   );
 }

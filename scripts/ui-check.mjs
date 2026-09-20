@@ -52,7 +52,7 @@ for (const viewport of VIEWPORTS) {
   await page.goto(BASE, { waitUntil: "networkidle" });
 
   check(
-    await page.getByRole("heading", { name: /Understand a Solana token/i }).isVisible(),
+    await page.getByRole("heading", { name: /Know a token/i }).isVisible(),
     "landing headline renders",
   );
   check(await page.locator("#mint-address").isVisible(), "address input renders");
@@ -64,13 +64,13 @@ for (const viewport of VIEWPORTS) {
   await validationError.waitFor({ state: "visible", timeout: 4000 }).catch(() => {});
   check(await validationError.isVisible(), "invalid address shows inline validation");
   check(
-    await page.getByRole("button", { name: /Analyse token/i }).isDisabled(),
+    await page.locator('form button[type="submit"]').isDisabled(),
     "submit disabled while address is invalid",
   );
 
   // Full analysis flow.
   await page.locator("#mint-address").fill(TOKEN);
-  await page.getByRole("button", { name: /Analyse token/i }).click();
+  await page.locator('form button[type="submit"]').click();
 
   await page
     .getByRole("heading", { name: /Risk profile by category/i })
@@ -95,8 +95,11 @@ for (const viewport of VIEWPORTS) {
     );
   }
   check(
-    await page.getByRole("img", { name: /Risk score \d+ out of 100/ }).isVisible(),
-    "score gauge renders with accessible label",
+    await page
+      .getByRole("img", { name: /Risk score \d+ out of 100/ })
+      .first()
+      .isVisible(),
+    "score dial renders with accessible label",
   );
   check(
     await page.getByRole("heading", { name: /Holder distribution/i }).isVisible(),
@@ -110,6 +113,28 @@ for (const viewport of VIEWPORTS) {
     (await page.getByText(/Not financial advice/i).count()) > 0,
     "disclaimer present",
   );
+
+  // ---- Layout: the sticky rail is desktop-only ----
+  const rail = page.getByRole("complementary", { name: /Report summary/i });
+  const railVisible = (await rail.count()) > 0 && (await rail.first().isVisible());
+  if (viewport.width >= 1280) {
+    check(railVisible, "sticky summary rail present on desktop");
+    if (railVisible) {
+      const nav = page.getByRole("navigation", { name: /Report sections/i });
+      check((await nav.count()) > 0, "section navigation present in rail");
+      const position = await rail
+        .first()
+        .evaluate((el) => getComputedStyle(el).position);
+      check(position === "sticky", "rail is sticky", position);
+    }
+  } else {
+    check(!railVisible, "sticky rail hidden on narrow viewports");
+    check(
+      (await page.getByText(/Main concerns/i).count()) > 0 ||
+        (await page.getByText(/No signal was flagged/i).count()) > 0,
+      "hero remains self-sufficient without the rail",
+    );
+  }
 
   // ---- Evidence audit: exercise EVERY evidence action on the page ----
   // This is the product's core trust feature, so it is checked exhaustively
@@ -172,8 +197,14 @@ for (const viewport of VIEWPORTS) {
   );
   check(overflow <= 1, "no horizontal overflow", `${overflow}px`);
 
+  // Two captures per viewport: the full page for reviewing the whole report,
+  // and a viewport-sized one because `fullPage` renders position:sticky
+  // elements at their final scroll offset, which misrepresents the rail.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${SHOT_DIR}/${viewport.name}-viewport.png` });
   await page.screenshot({
-    path: `${SHOT_DIR}/${viewport.name}.png`,
+    path: `${SHOT_DIR}/${viewport.name}-full.png`,
     fullPage: true,
   });
 

@@ -6,117 +6,221 @@ import TokenInputForm from "@/components/TokenInputForm";
 import ReportView from "@/components/ReportView";
 import type { RiskReport } from "@/lib/risk-engine/types";
 
-type ViewState =
-  | { kind: "idle" }
-  | { kind: "loading" }
-  | { kind: "error"; message: string }
-  | { kind: "result"; report: RiskReport };
+type Status = "idle" | "loading" | "error" | "result";
 
 export default function Home() {
-  const [state, setState] = useState<ViewState>({ kind: "idle" });
+  const [status, setStatus] = useState<Status>("idle");
+  const [report, setReport] = useState<RiskReport | null>(null);
+  const [error, setError] = useState("");
 
   const analyze = useCallback(async (address: string) => {
-    setState({ kind: "loading" });
+    setStatus("loading");
     try {
-      const response = await fetch(
-        `/api/analyze?address=${encodeURIComponent(address)}`,
-      );
+      const response = await fetch(`/api/analyze?address=${encodeURIComponent(address)}`);
       const payload = await response.json();
 
       if (!response.ok) {
-        setState({
-          kind: "error",
-          message:
-            typeof payload?.error === "string"
-              ? payload.error
-              : "The analysis service returned an unexpected response.",
-        });
+        setError(
+          typeof payload?.error === "string"
+            ? payload.error
+            : "The analysis service returned an unexpected response.",
+        );
+        setStatus("error");
         return;
       }
 
-      setState({ kind: "result", report: payload as RiskReport });
+      setReport(payload as RiskReport);
+      setStatus("result");
     } catch {
-      setState({
-        kind: "error",
-        message:
-          "Could not reach the analysis service. Check your connection and try again.",
-      });
+      setError("Could not reach the analysis service. Check your connection and try again.");
+      setStatus("error");
     }
   }, []);
 
+  const reset = useCallback(() => {
+    setReport(null);
+    setError("");
+    setStatus("idle");
+  }, []);
+
+  const loading = status === "loading";
+
+  /*
+   * Once a report exists the page stays in its compact, report-first layout —
+   * including while a *new* token is being analysed. Snapping back to the
+   * marketing hero mid-analysis would feel like losing your place.
+   */
+  const compactLayout = report !== null;
+
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="border-b" style={{ borderColor: "var(--border)" }}>
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-3">
+    <>
+      <div className="ambient" aria-hidden="true" />
+
+      <div className="relative z-10 min-h-screen flex flex-col">
+        <SiteHeader onReset={reset} canReset={compactLayout} />
+
+        <main className="flex-1 w-full mx-auto px-4 sm:px-6 py-8 sm:py-10 max-w-[1500px]">
+          {compactLayout ? (
+            <>
+              <div className="max-w-2xl mb-6">
+                <TokenInputForm onAnalyze={analyze} loading={loading} compact />
+              </div>
+              {loading && <ScanningState />}
+              {status === "error" && <ErrorState message={error} />}
+              {status === "result" && report && <ReportView report={report} />}
+            </>
+          ) : (
+            <div className="max-w-3xl mx-auto">
+              <Hero />
+              <div className="mt-8">
+                <TokenInputForm onAnalyze={analyze} loading={loading} />
+              </div>
+              <div className="mt-10">
+                {status === "idle" && <WhatGetsChecked />}
+                {loading && <ScanningState />}
+                {status === "error" && <ErrorState message={error} />}
+              </div>
+            </div>
+          )}
+        </main>
+
+        <SiteFooter />
+      </div>
+    </>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+function SiteHeader({
+  onReset,
+  canReset,
+}: {
+  onReset: () => void;
+  canReset: boolean;
+}) {
+  return (
+    <header
+      className="sticky top-0 z-40"
+      style={{
+        height: "var(--header-h)",
+        background: "rgba(5,6,10,0.72)",
+        backdropFilter: "blur(16px)",
+        WebkitBackdropFilter: "blur(16px)",
+        borderBottom: "1px solid var(--line)",
+      }}
+    >
+      <div className="h-full max-w-[1500px] mx-auto px-4 sm:px-6 flex items-center justify-between gap-4">
+        <button
+          type="button"
+          onClick={onReset}
+          disabled={!canReset}
+          aria-label={canReset ? "Start a new analysis" : "Solana Risk Radar"}
+          className={`flex items-center gap-2.5 min-w-0 text-left ${
+            canReset ? "cursor-pointer" : "cursor-default"
+          }`}
+        >
           <RadarMark />
-          <div className="min-w-0">
-            <h1 className="font-semibold text-[15px] leading-tight">Solana Risk Radar</h1>
-            <p className="text-xs leading-tight" style={{ color: "var(--muted)" }}>
-              Deterministic risk signals, not predictions
-            </p>
-          </div>
-        </div>
-      </header>
-
-      <main className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-        {state.kind !== "result" && (
-          <div className="text-center max-w-2xl mx-auto mb-8">
-            <h2 className="text-3xl sm:text-[2.5rem] font-semibold tracking-tight leading-[1.1]">
-              Understand a Solana token&rsquo;s risk in seconds
-            </h2>
-            <p
-              className="mt-3.5 text-base sm:text-lg leading-relaxed"
-              style={{ color: "var(--muted-strong)" }}
+          <span className="min-w-0">
+            <span className="block font-semibold text-[14px] leading-tight truncate">
+              Solana Risk Radar
+            </span>
+            <span
+              className="hidden sm:block text-[11px] leading-tight"
+              style={{ color: "var(--ink-muted)" }}
             >
-              Paste a mint address. Risk Radar reads real on-chain and market data, scores it
-              with a transparent rule engine, and shows you exactly which signals drove the
-              result &mdash; with the evidence behind every one.
-            </p>
-          </div>
-        )}
+              Deterministic risk signals, not predictions
+            </span>
+          </span>
+        </button>
 
-        <TokenInputForm onAnalyze={analyze} loading={state.kind === "loading"} />
-
-        <div className="mt-8">
-          {state.kind === "idle" && <EmptyState />}
-          {state.kind === "loading" && <LoadingState />}
-          {state.kind === "error" && <ErrorState message={state.message} />}
-          {state.kind === "result" && <ReportView report={state.report} />}
+        <div className="hidden md:flex items-center gap-2 text-[11px]">
+          <Pill>Deterministic</Pill>
+          <Pill>No API keys</Pill>
+          <Pill>Evidence-backed</Pill>
         </div>
-      </main>
+      </div>
+    </header>
+  );
+}
 
-      <footer
-        className="max-w-4xl mx-auto w-full px-4 sm:px-6 py-8 text-xs text-center leading-relaxed"
-        style={{ color: "var(--muted)" }}
-      >
-        On-chain data from Solana RPC and the Metaplex / Token-2022 metadata standards.
-        Market data from DexScreener. No API keys, no account, no tracking.
-        <br />
-        Built for the Superteam Germany Road to Colosseum Hackathon.
-      </footer>
-    </div>
+function Pill({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      className="px-2.5 py-1 rounded-full"
+      style={{
+        border: "1px solid var(--line)",
+        background: "rgba(255,255,255,0.03)",
+        color: "var(--ink-muted)",
+      }}
+    >
+      {children}
+    </span>
   );
 }
 
 function RadarMark() {
   return (
-    <div
-      className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0"
-      style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
+    <span
+      className="relative h-8 w-8 rounded-[10px] flex items-center justify-center shrink-0"
+      style={{
+        background: "linear-gradient(140deg, rgba(56,214,236,0.18), rgba(99,102,241,0.18))",
+        border: "1px solid var(--line-strong)",
+      }}
       aria-hidden="true"
     >
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-        <circle cx="9" cy="9" r="7" stroke="var(--border-strong)" strokeWidth="1.2" />
-        <circle cx="9" cy="9" r="3.5" stroke="var(--border-strong)" strokeWidth="1.2" />
-        <path d="M9 9L14 5.5" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" />
-        <circle cx="9" cy="9" r="1.3" fill="var(--accent)" />
+      <svg width="17" height="17" viewBox="0 0 18 18" fill="none">
+        <circle cx="9" cy="9" r="7" stroke="rgba(255,255,255,0.22)" strokeWidth="1.1" />
+        <circle cx="9" cy="9" r="3.6" stroke="rgba(255,255,255,0.22)" strokeWidth="1.1" />
+        <path d="M9 9L14.2 5.2" stroke="var(--accent)" strokeWidth="1.6" strokeLinecap="round" />
+        <circle cx="9" cy="9" r="1.35" fill="var(--accent)" />
       </svg>
+    </span>
+  );
+}
+
+function Hero() {
+  return (
+    <div className="text-center rise">
+      <span
+        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px]"
+        style={{
+          border: "1px solid var(--line)",
+          background: "rgba(255,255,255,0.03)",
+          color: "var(--ink-secondary)",
+        }}
+      >
+        <span
+          aria-hidden="true"
+          className="h-1.5 w-1.5 rounded-full"
+          style={{ background: "var(--accent)", boxShadow: "0 0 8px var(--accent-glow)" }}
+        />
+        14 deterministic signals · 5 risk categories
+      </span>
+
+      <h1
+        className="mt-5 display text-[38px] sm:text-[56px] font-semibold"
+        style={{ color: "#fff" }}
+      >
+        Know a token&rsquo;s risk
+        <br />
+        <span className="grad-text">before you touch it</span>
+      </h1>
+
+      <p
+        className="mt-5 text-[15px] sm:text-[17px] leading-relaxed max-w-xl mx-auto"
+        style={{ color: "var(--ink-secondary)" }}
+      >
+        Paste any Solana mint address. Risk Radar reads real on-chain and market data, scores
+        it with a transparent rule engine, and shows you exactly which signals drove the
+        result — with the evidence behind every one.
+      </p>
     </div>
   );
 }
 
-function EmptyState() {
-  const checks = [
+function WhatGetsChecked() {
+  const checks: [string, string][] = [
     ["Authorities", "Can supply still be minted, wallets frozen, or transfers intercepted?"],
     ["Holders", "How much of the sellable supply sits in the largest wallets?"],
     ["Liquidity", "Is there a real market deep enough to exit into?"],
@@ -125,21 +229,36 @@ function EmptyState() {
   ];
 
   return (
-    <div>
-      <p className="text-xs uppercase tracking-[0.14em] mb-3" style={{ color: "var(--muted)" }}>
-        What gets checked
-      </p>
-      <div className="grid sm:grid-cols-2 gap-3">
-        {checks.map(([title, description]) => (
+    <div className="rise">
+      <div className="eyebrow text-center mb-4">What gets checked</div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {checks.map(([title, description], index) => (
           <div
             key={title}
-            className="rounded-xl border p-4"
-            style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+            className={`card card-hover p-4 flex gap-3.5 ${
+              index === checks.length - 1 ? "sm:col-span-2" : ""
+            }`}
           >
-            <h3 className="font-medium text-sm">{title}</h3>
-            <p className="text-sm mt-1 leading-relaxed" style={{ color: "var(--muted)" }}>
-              {description}
-            </p>
+            <span
+              aria-hidden="true"
+              className="tnum h-8 w-8 rounded-[9px] shrink-0 flex items-center justify-center text-[11px] font-semibold"
+              style={{
+                background: "rgba(56,214,236,0.08)",
+                border: "1px solid var(--line)",
+                color: "var(--accent)",
+              }}
+            >
+              {String(index + 1).padStart(2, "0")}
+            </span>
+            <div className="min-w-0">
+              <h3 className="font-medium text-sm">{title}</h3>
+              <p
+                className="text-[13px] mt-1 leading-relaxed"
+                style={{ color: "var(--ink-secondary)" }}
+              >
+                {description}
+              </p>
+            </div>
           </div>
         ))}
       </div>
@@ -147,42 +266,56 @@ function EmptyState() {
   );
 }
 
-function LoadingState() {
+function ScanningState() {
+  const stages = [
+    "Reading the mint account",
+    "Resolving and classifying top holders",
+    "Decoding on-chain metadata",
+    "Pulling liquidity and market data",
+  ];
+
   return (
-    <div className="space-y-4" role="status" aria-live="polite">
+    <div className="card card-lit p-6 sm:p-8 rise" role="status" aria-live="polite">
       <span className="sr-only">Analysing token…</span>
 
-      <div
-        className="rounded-2xl border p-5 sm:p-7"
-        style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-      >
-        <div className="flex flex-col sm:flex-row gap-6 sm:gap-8 sm:items-center">
-          <div
-            className="h-[168px] w-[168px] rounded-full shrink-0 animate-shimmer"
-            style={{ background: "var(--surface-2)" }}
+      <div className="flex items-center gap-4">
+        <div
+          className="relative h-11 w-11 rounded-full shrink-0 flex items-center justify-center overflow-hidden"
+          style={{ border: "1px solid var(--line-accent)", background: "rgba(56,214,236,0.06)" }}
+        >
+          <span
+            className="h-2 w-2 rounded-full shimmer"
+            style={{ background: "var(--accent)", boxShadow: "0 0 12px var(--accent-glow)" }}
           />
-          <div className="flex-1 space-y-3">
-            <div className="h-6 w-44 rounded animate-shimmer" style={{ background: "var(--surface-2)" }} />
-            <div className="h-5 w-56 rounded animate-shimmer" style={{ background: "var(--surface-2)" }} />
-            <div className="h-4 w-full max-w-md rounded animate-shimmer" style={{ background: "var(--surface-2)" }} />
-            <p className="text-xs pt-1" style={{ color: "var(--muted)" }}>
-              Reading the mint account, resolving top holders, and pulling market data…
-              <br />
-              Holder scans can take a few seconds on public RPC endpoints.
-            </p>
+        </div>
+        <div>
+          <div className="font-medium">Analysing token</div>
+          <div className="text-[13px] mt-0.5" style={{ color: "var(--ink-muted)" }}>
+            Holder scans take a few seconds on public RPC endpoints.
           </div>
         </div>
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-3">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div
-            key={index}
-            className="h-32 rounded-xl border animate-shimmer"
-            style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-          />
+      <div className="mt-6 space-y-2.5">
+        {stages.map((stage) => (
+          <div key={stage} className="flex items-center gap-3">
+            <span
+              aria-hidden="true"
+              className="h-1.5 w-1.5 rounded-full shrink-0 shimmer"
+              style={{ background: "var(--accent)" }}
+            />
+            <span className="text-[13px]" style={{ color: "var(--ink-secondary)" }}>
+              {stage}
+            </span>
+          </div>
         ))}
       </div>
+
+      <div
+        className="sweep relative mt-6 h-[3px] rounded-full overflow-hidden"
+        style={{ background: "rgba(255,255,255,0.06)" }}
+        aria-hidden="true"
+      />
     </div>
   );
 }
@@ -190,16 +323,46 @@ function LoadingState() {
 function ErrorState({ message }: { message: string }) {
   return (
     <div
-      className="rounded-xl border p-5"
-      style={{ borderColor: "rgba(229,72,77,0.4)", background: "rgba(229,72,77,0.07)" }}
+      className="card p-5 rise"
+      style={{ borderColor: "rgba(229,72,77,0.35)", background: "rgba(229,72,77,0.05)" }}
       role="alert"
     >
-      <strong className="text-sm" style={{ color: "#e5484d" }}>
-        Could not analyse this address
-      </strong>
-      <p className="mt-1.5 text-sm leading-relaxed" style={{ color: "var(--muted-strong)" }}>
-        {message}
-      </p>
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden="true"
+          className="mt-0.5 h-6 w-6 rounded-md shrink-0 flex items-center justify-center text-[11px]"
+          style={{ background: "rgba(229,72,77,0.14)", color: "#e5484d" }}
+        >
+          ■
+        </span>
+        <div className="min-w-0">
+          <strong className="text-sm" style={{ color: "#e5484d" }}>
+            Could not analyse this address
+          </strong>
+          <p className="mt-1.5 text-[13px] leading-relaxed" style={{ color: "var(--ink-secondary)" }}>
+            {message}
+          </p>
+        </div>
+      </div>
     </div>
+  );
+}
+
+function SiteFooter() {
+  return (
+    <footer
+      className="relative z-10 mt-8"
+      style={{ borderTop: "1px solid var(--line)" }}
+    >
+      <div className="max-w-[1500px] mx-auto px-4 sm:px-6 py-7 text-[11px] leading-relaxed text-center sm:text-left sm:flex sm:items-center sm:justify-between gap-4">
+        <p style={{ color: "var(--ink-faint)" }}>
+          On-chain data from Solana RPC and the Metaplex / Token-2022 metadata standards.
+          Market data from DexScreener.
+        </p>
+        <p className="mt-2 sm:mt-0 shrink-0" style={{ color: "var(--ink-faint)" }}>
+          Built for the Superteam Germany Road to Colosseum Hackathon
+        </p>
+      </div>
+    </footer>
   );
 }
