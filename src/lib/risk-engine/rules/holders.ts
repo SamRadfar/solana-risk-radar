@@ -9,6 +9,24 @@ const CATEGORY = "Holders" as const;
  * Concentration is measured over *circulating* supply and counts only holders
  * who could actually sell. Pool vaults and burn addresses are excluded — see
  * `lib/solana/holders.ts` for how each holder is classified.
+ *
+ * The two rules here deliberately measure different failure modes, because the
+ * obvious pair (top-1 and top-10) does not. Across real mainnet tokens top-1
+ * and top-10 correlate at r = 0.92: top-10 *contains* top-1, so scoring both
+ * charges the same wallet twice and calls it two independent findings. TRUMP is
+ * the clearest case — one wallet holds 72.7% and the top ten hold 87.9%, which
+ * the old pairing reported as both "critical single holder" and "critical
+ * systemic distribution", when the next nine wallets actually hold only 15.2%.
+ *
+ * Scoring the marginal share instead (holders 2–10, excluding the largest)
+ * drops that correlation to r = 0.07, so the two signals answer genuinely
+ * separate questions:
+ *
+ *   Largest Holder  — can one actor crash the price or exit ahead of everyone?
+ *   Holder Spread   — is there a cluster behind them that could act together?
+ *
+ * The familiar top-10 figure is still reported, in both rules' evidence and in
+ * the distribution panel. It is shown, just not charged twice.
  */
 
 const TOP1_BANDS: readonly Band[] = [
@@ -19,17 +37,35 @@ const TOP1_BANDS: readonly Band[] = [
   [Infinity, "critical"],
 ];
 
-const TOP10_BANDS: readonly Band[] = [
-  [0.15, "none"],
-  [0.3, "low"],
+/**
+ * Thresholds for the nine holders behind the largest, calibrated against real
+ * tokens rather than reused from the top-1 scale. Nine wallets sharing 30% of
+ * supply (~3.3% each) is ordinary for a widely held token; nine wallets sharing
+ * 65% is a bloc that can move the market together.
+ */
+const NEXT9_BANDS: readonly Band[] = [
+  [0.2, "none"],
+  [0.35, "low"],
   [0.5, "medium"],
-  [0.7, "high"],
+  [0.65, "high"],
   [Infinity, "critical"],
 ];
 
 function holderEvidence({ holderData }: AnalysisInput): Evidence[] {
   const evidence: Evidence[] = [
     { label: "Accounts examined", value: String(holderData.holders.length) },
+    {
+      label: "Largest holder",
+      value: holderData.topHolderShare !== null ? pct(holderData.topHolderShare) : "—",
+    },
+    {
+      label: "Holders 2–10 combined",
+      value: holderData.next9Share !== null ? pct(holderData.next9Share) : "—",
+    },
+    {
+      label: "Top 10 combined",
+      value: holderData.top10Share !== null ? pct(holderData.top10Share) : "—",
+    },
     { label: "Held in DEX pools", value: pct(holderData.pooledShare) },
     { label: "Provably burned", value: pct(holderData.burnedShare) },
   ];
@@ -37,7 +73,9 @@ function holderEvidence({ holderData }: AnalysisInput): Evidence[] {
   for (const holder of holderData.holders.slice(0, 5)) {
     const kind =
       holder.label ??
-      (holder.kind === "wallet" ? "wallet" : holder.kind.replace(/^\w/, (c) => c.toUpperCase()));
+      (holder.kind === "wallet"
+        ? "wallet"
+        : holder.kind.replace(/^\w/, (c) => c.toUpperCase()));
     evidence.push({
       label: `${pct(holder.share)} — ${kind}`,
       value: holder.owner ?? holder.tokenAccount,
@@ -53,13 +91,13 @@ const UNAVAILABLE_REASON = (error: string | undefined) =>
     error ?? "The Solana RPC endpoint did not return the token's largest accounts."
   }`;
 
-/** Share held by the single largest account that could sell. */
+/** Single-actor risk: the largest holder that could sell. */
 export function topHolderRule(input: AnalysisInput): RiskSignal {
   const { holderData } = input;
   const ID = "top-holder";
   const LABEL = "Largest Holder";
   const METRIC = "Largest single holder's share of circulating supply";
-  const MAX_POINTS = 16;
+  const MAX_POINTS = 18;
 
   if (!holderData.available || holderData.topHolderShare === null) {
     return unavailable({
@@ -99,15 +137,15 @@ export function topHolderRule(input: AnalysisInput): RiskSignal {
   });
 }
 
-/** Combined share of the ten largest accounts that could sell. */
-export function top10HoldersRule(input: AnalysisInput): RiskSignal {
+/** Coordinated risk: the cluster sitting behind the largest holder. */
+export function holderSpreadRule(input: AnalysisInput): RiskSignal {
   const { holderData } = input;
-  const ID = "top10-holders";
-  const LABEL = "Top 10 Holders";
-  const METRIC = "Ten largest holders' combined share of circulating supply";
-  const MAX_POINTS = 14;
+  const ID = "holder-spread";
+  const LABEL = "Holder Spread";
+  const METRIC = "Combined share of the 2nd–10th largest holders";
+  const MAX_POINTS = 10;
 
-  if (!holderData.available || holderData.top10Share === null) {
+  if (!holderData.available || holderData.next9Share === null) {
     return unavailable({
       id: ID,
       label: LABEL,
@@ -118,8 +156,14 @@ export function top10HoldersRule(input: AnalysisInput): RiskSignal {
     });
   }
 
-  const share = holderData.top10Share;
-  const severity = classify(share, TOP10_BANDS);
+  const share = holderData.next9Share;
+  const severity = classify(share, NEXT9_BANDS);
+  const top10 = holderData.top10Share;
+
+  const context =
+    top10 !== null
+      ? ` Together with the largest holder they hold ${pct(top10)}; the largest holder is scored separately so that one wallet is not counted twice.`
+      : "";
 
   return signal({
     id: ID,
@@ -128,11 +172,11 @@ export function top10HoldersRule(input: AnalysisInput): RiskSignal {
     metric: METRIC,
     maxPoints: MAX_POINTS,
     severity,
-    observedValue: `${pct(share)} of circulating supply`,
+    observedValue: `${pct(share)} held by holders 2–10`,
     explanation:
       severity === "none"
-        ? `The ten largest sellable holders together control ${pct(share)} of circulating supply, which indicates broad distribution.`
-        : `The ten largest sellable holders together control ${pct(share)} of circulating supply. Coordinated or panicked selling by a small group of wallets could overwhelm available liquidity. Liquidity-pool vaults and burned supply are already excluded from this figure.`,
+        ? `The nine holders behind the largest one hold ${pct(share)} of circulating supply between them — no significant bloc sits behind the top holder.${context}`
+        : `The nine holders behind the largest one hold ${pct(share)} of circulating supply between them. A cluster this size could move the market together, whether by coordinating or simply by reacting to the same news at the same time.${context}`,
     evidence: holderEvidence(input),
   });
 }

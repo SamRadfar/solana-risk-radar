@@ -4,6 +4,7 @@ import { RULES, buildRiskReport, classifyScore } from "./engine";
 import { classify, classifyDescending, pointsFor, type Band } from "./helpers";
 import type { AnalysisInput } from "./input";
 import type { DataSourceStatus, TokenOverview } from "./types";
+import { DAY, makeInput, pair } from "./test-fixtures";
 
 /**
  * The risk engine is pure: every rule is a function of fetched data to a
@@ -15,86 +16,6 @@ import type { DataSourceStatus, TokenOverview } from "./types";
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
-
-const DAY = 24 * 60 * 60 * 1000;
-
-function makeInput(overrides: Partial<AnalysisInput> = {}): AnalysisInput {
-  return {
-    mint: "So11111111111111111111111111111111111111112",
-    mintInfo: {
-      address: "So11111111111111111111111111111111111111112",
-      tokenProgram: "spl-token",
-      programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-      decimals: 9,
-      supplyRaw: "1000000000000000",
-      supplyUi: 1_000_000,
-      supplyIsMeaningful: true,
-      mintAuthority: null,
-      freezeAuthority: null,
-      isInitialized: true,
-      extensions: [],
-      slot: 1,
-    },
-    metadata: {
-      name: "Test Token",
-      symbol: "TEST",
-      uri: null,
-      updateAuthority: null,
-      isMutable: false,
-      source: "metaplex",
-      metadataAccount: "meta",
-    },
-    holderData: {
-      available: true,
-      holders: [],
-      circulatingSupply: 1_000_000,
-      pooledShare: 0.3,
-      burnedShare: 0,
-      topHolderShare: 0.02,
-      top10Share: 0.1,
-    },
-    tokenAge: {
-      available: true,
-      oldestSignatureAt: Date.now() - 500 * DAY,
-      ageDays: 500,
-      isLowerBound: false,
-      signaturesScanned: 120,
-    },
-    marketData: {
-      available: true,
-      name: "Test Token",
-      symbol: "TEST",
-      imageUrl: null,
-      websites: [],
-      socials: [],
-      pairs: [
-        pair({ liquidityUsd: 2_000_000, volume24hUsd: 500_000 }),
-        pair({ liquidityUsd: 1_500_000, volume24hUsd: 300_000, dexId: "orca" }),
-        pair({ liquidityUsd: 900_000, volume24hUsd: 100_000, dexId: "meteora" }),
-      ],
-    },
-    ...overrides,
-  };
-}
-
-function pair(overrides: Record<string, unknown> = {}) {
-  return {
-    dexId: "raydium",
-    pairAddress: "pair",
-    quoteSymbol: "SOL",
-    liquidityUsd: 1_000_000,
-    volume24hUsd: 200_000,
-    priceUsd: 1,
-    pairCreatedAt: Date.now() - 400 * DAY,
-    fdv: 10_000_000,
-    marketCap: 10_000_000,
-    priceChange24h: 2,
-    buys24h: 500,
-    sells24h: 480,
-    url: null,
-    ...overrides,
-  } as AnalysisInput["marketData"]["pairs"][number];
-}
 
 const OVERVIEW = {} as TokenOverview;
 const SOURCES: DataSourceStatus[] = [];
@@ -248,6 +169,7 @@ describe("holder rules", () => {
           burnedShare: 0,
           topHolderShare: null,
           top10Share: null,
+          next9Share: null,
           error: "rate limited",
         },
       }),
@@ -260,7 +182,7 @@ describe("holder rules", () => {
       expect(signal.points).toBe(0);
     }
     // Their weight must leave the denominator, not sit in it scoring zero.
-    expect(report.availableWeight).toBe(report.totalWeight - 30);
+    expect(report.availableWeight).toBe(report.totalWeight - 28);
   });
 });
 
@@ -451,6 +373,7 @@ describe("report aggregation", () => {
           ...makeInput().holderData,
           topHolderShare: 0.6,
           top10Share: 0.95,
+          next9Share: 0.35,
         },
         tokenAge: {
           available: true,
@@ -502,6 +425,7 @@ describe("report aggregation", () => {
           burnedShare: 0,
           topHolderShare: null,
           top10Share: null,
+          next9Share: null,
           error: "unavailable",
         },
         tokenAge: {
@@ -543,10 +467,10 @@ describe("report aggregation", () => {
 
   it("maps scores onto classification bands at the documented boundaries", () => {
     expect(classifyScore(0, true)).toBe("Low Risk Signals");
-    expect(classifyScore(14, true)).toBe("Low Risk Signals");
-    expect(classifyScore(15, true)).toBe("Moderate Risk Signals");
-    expect(classifyScore(34, true)).toBe("Moderate Risk Signals");
-    expect(classifyScore(35, true)).toBe("Elevated Risk Signals");
+    expect(classifyScore(19, true)).toBe("Low Risk Signals");
+    expect(classifyScore(20, true)).toBe("Moderate Risk Signals");
+    expect(classifyScore(39, true)).toBe("Moderate Risk Signals");
+    expect(classifyScore(40, true)).toBe("Elevated Risk Signals");
     expect(classifyScore(59, true)).toBe("Elevated Risk Signals");
     expect(classifyScore(60, true)).toBe("High Risk Signals");
     expect(classifyScore(79, true)).toBe("High Risk Signals");

@@ -84,8 +84,12 @@ should *not* use.
 3. Fourteen deterministic rules score the result. Each returns a metric, an
    observed value, a severity, a point contribution, a plain-English
    explanation and inspectable evidence.
-4. The UI leads with the score and what it means, then the category profile,
-   then flagged signals, then everything that passed.
+4. The report is presented in two layers. **Quick assessment** answers the
+   question on its own — score, band, a one-sentence reason it landed there,
+   how many findings at each severity, and the three that contributed most.
+   **Detailed evidence** holds everything behind that answer: the category
+   breakdown, every signal with its raw evidence, the classified holder table
+   and the data provenance. Nothing is summarised away.
 
 Full detail: [`ARCHITECTURE.md`](ARCHITECTURE.md) ·
 [`METHODOLOGY.md`](METHODOLOGY.md) · [`DEMO.md`](DEMO.md)
@@ -94,17 +98,19 @@ Full detail: [`ARCHITECTURE.md`](ARCHITECTURE.md) ·
 
 ## What it checks
 
-| Category | Weight | Signals |
-|---|---:|---|
-| **Authorities** | 58 | Mint authority, freeze authority, Token-2022 transfer controls, metadata mutability |
-| **Liquidity** | 32 | Total depth, depth vs market cap, pool diversity |
-| **Holders** | 30 | Largest holder, top 10 combined |
-| **Market activity** | 22 | Volume vs liquidity, buy/sell balance, 24h price movement |
-| **Maturity** | 22 | Pool age, token age |
+| Category | Signals |
+|---|---|
+| **Authorities** | Mint authority, freeze authority, Token-2022 transfer controls, metadata mutability |
+| **Holders** | Largest holder, holder spread (2nd–10th) |
+| **Liquidity** | Total depth, depth vs market cap, pool diversity |
+| **Market activity** | Volume vs liquidity, buy/sell balance, 24h price movement |
+| **Maturity** | Pool age, token age |
 
-Total weight 164. Exact thresholds in [`METHODOLOGY.md`](METHODOLOGY.md).
+**All five categories carry equal weight**, and they are combined
+non-compensatorily — clean dimensions cannot cancel out severe ones. Exact
+thresholds and the full derivation are in [`METHODOLOGY.md`](METHODOLOGY.md).
 
-### Two things it does that most token checkers don't
+### Three things it does that most token checkers don't
 
 **Holders are classified, not just counted.** `getTokenLargestAccounts` returns
 token *accounts*, not people. A pool vault holding 40% of supply is liquidity,
@@ -118,6 +124,13 @@ shown in full so you can check the call yourself.
 your wallet at any time, and a transfer hook can block a sale outright. These
 are invisible to checkers that only look at mint and freeze authority.
 
+**Correlated signals are not double-counted.** "Largest holder" and "top 10
+holders" correlate at r = 0.92 on real tokens, because the top 10 *contains*
+the largest — scoring both charges one wallet twice. Risk Radar scores the
+marginal share instead (holders 2–10, r = 0.07 against the largest), so the two
+signals answer genuinely different questions: *can one actor crash this?* and
+*is there a bloc behind them?* The familiar top-10 figure is still shown.
+
 ---
 
 ## Honesty about limits
@@ -128,6 +141,11 @@ Risk Radar is built to be trustworthy about what it does *not* know:
   scores zero points *and* drops out of the denominator, so a token is never
   made to look safe by data that failed to load. Coverage is shown on every
   report, and below 40% the score is withheld entirely as "Insufficient Data".
+- **A single severe finding does not max the score.** One fully compromised
+  category scores 45 of 100 — deliberately. Two reach "High". The specific
+  danger is surfaced in "Main concerns" rather than inflated into the headline
+  number, because the score summarises a profile and the concerns list names
+  the finding.
 - **Token age is often unknowable.** It is derived from signature history; a
   heavily traded token has more history than can be scanned, so its age is
   reported as unmeasured rather than guessed. A *new* token resolves exactly —
@@ -148,13 +166,27 @@ Rule logic is pure — each rule is a function from a typed `AnalysisInput` to a
 against synthetic inputs with no network:
 
 ```bash
-npm test        # 35 unit tests
+npm test        # 79 unit tests
 ```
 
 These cover every threshold boundary, both directions of each two-sided rule,
 the missing-data paths, and the aggregation invariants (no signal can charge
 more than its weight; an unavailable signal charges nothing; identical inputs
 give identical scores).
+
+Three groups are worth calling out:
+
+- **Calibration** — pins the aggregation itself: that clean dimensions cannot
+  cancel severe ones, that the score rises monotonically with risk, that one
+  compromised category can never alone produce a "High" verdict, and that
+  realistic token archetypes land in their intended bands.
+- **Correlation** — proves the two holder signals stay independent: two tokens
+  with near-identical top-10 totals but opposite shapes produce opposite
+  findings.
+- **Evidence** — audits the trust feature: every measured signal carries
+  well-formed evidence, links are absolute https, evidence matches the exact
+  claim its signal makes, and an unmeasured signal never implies a measurement
+  happened.
 
 Beyond unit tests, the app was driven end to end against real mainnet tokens:
 
@@ -168,9 +200,11 @@ Beyond unit tests, the app was driven end to end against real mainnet tokens:
 | TRUMP | Genuinely extreme holder concentration |
 | invalid / non-mint / token-account / nonexistent addresses | Error handling |
 
-`npm run probe` re-runs that sweep and asserts the report invariants;
-`npm run ui-check` drives the real UI in Chromium at desktop and mobile widths,
-failing on any console error, page error or horizontal overflow.
+`npm run probe` re-runs that sweep and asserts the report invariants, including
+that every listed concern traces back to a measured signal and that the
+severity counts total the signal count. `npm run ui-check` drives the real UI in
+Chromium at desktop and mobile widths, clicking **every** evidence action on the
+page and failing on any console error, page error or horizontal overflow.
 
 ---
 

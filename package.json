@@ -12,7 +12,9 @@
     "test:watch": "vitest",
     "verify": "npm run typecheck && npm run lint && npm run test && npm run build",
     "probe": "node scripts/probe.mjs",
-    "ui-check": "node scripts/ui-check.mjs"
+    "ui-check": "node scripts/ui-check.mjs",
+    "calibrate": "node scripts/collect-calibration.mjs",
+    "calibrate:evaluate": "node scripts/evaluate-aggregation.mjs"
   },
   "dependencies": {
     "@solana/web3.js": "^1.99.0",

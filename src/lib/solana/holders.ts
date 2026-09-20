@@ -50,8 +50,25 @@ export interface HolderData {
   burnedShare: number;
   /** Largest single non-pool, non-burn holder's share of circulating supply. */
   topHolderShare: number | null;
-  /** Combined share of the ten largest such holders. */
+  /**
+   * Combined share of the ten largest such holders. Kept because it is the
+   * metric people recognise, and displayed as-is — but note it *contains*
+   * `topHolderShare`, so the two are near-perfectly correlated and only one of
+   * them is scored. See `next9Share`.
+   */
   top10Share: number | null;
+  /**
+   * Combined share of the 2nd through 10th largest sellable holders, i.e.
+   * `top10Share` with the single largest holder removed.
+   *
+   * This is what the engine scores for distribution risk. Measured across real
+   * tokens, top-1 and top-10 correlate at r = 0.92 (scoring both charges the
+   * same wallet twice), while top-1 and this marginal measure correlate at
+   * r = 0.07 — so the two holder signals become genuinely independent: one
+   * asks "can a single actor crash this?", the other "is there a cluster
+   * behind them?".
+   */
+  next9Share: number | null;
   error?: string;
 }
 
@@ -63,6 +80,7 @@ const UNAVAILABLE = (error: string): HolderData => ({
   burnedShare: 0,
   topHolderShare: null,
   top10Share: null,
+  next9Share: null,
   error,
 });
 
@@ -101,6 +119,7 @@ export async function getHolderData(mint: MintInfo): Promise<HolderData> {
       burnedShare: 0,
       topHolderShare: 0,
       top10Share: 0,
+      next9Share: 0,
     };
   }
 
@@ -151,6 +170,11 @@ export async function getHolderData(mint: MintInfo): Promise<HolderData> {
     topHolderShare: dumpable.length > 0 ? rebase(dumpable[0].share) : 0,
     top10Share: rebase(
       dumpable.slice(0, 10).reduce((sum, holder) => sum + holder.share, 0),
+    ),
+    // Summed from the individual holders rather than subtracted from the top-10
+    // total, so rounding never produces a negative share.
+    next9Share: rebase(
+      dumpable.slice(1, 10).reduce((sum, holder) => sum + holder.share, 0),
     ),
   };
 }

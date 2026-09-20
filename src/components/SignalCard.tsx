@@ -86,7 +86,16 @@ export default function SignalCard({ signal }: { signal: RiskSignal }) {
             className="cursor-pointer font-medium"
             style={{ color: "var(--accent-dim)" }}
           >
-            {open ? "Hide evidence" : "Inspect evidence"}
+            {/*
+              An unavailable signal's evidence describes why the measurement
+              failed, not a finding. Labelling it "Inspect evidence" would imply
+              a measurement exists when it does not.
+            */}
+            {open
+              ? "Hide details"
+              : unavailable
+                ? "Why not measured"
+                : "Inspect evidence"}
           </button>
         )}
       </div>

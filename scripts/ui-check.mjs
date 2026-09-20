@@ -77,6 +77,23 @@ for (const viewport of VIEWPORTS) {
     .waitFor({ state: "visible", timeout: 90_000 });
 
   check(true, "report renders after analysis");
+
+  // ---- Quick assessment layer ----
+  check(
+    (await page.getByRole("heading", { name: /Detailed evidence/i }).count()) > 0,
+    "detailed-evidence layer is separated from the quick assessment",
+  );
+  check(
+    (await page.getByText(/Main concerns/i).count()) > 0 ||
+      (await page.getByText(/No signal was flagged/i).count()) > 0,
+    "quick assessment states the main concerns",
+  );
+  for (const label of ["Critical", "High", "Medium", "Low", "No concern"]) {
+    check(
+      (await page.getByText(label, { exact: true }).count()) > 0,
+      `severity count shown: ${label}`,
+    );
+  }
   check(
     await page.getByRole("img", { name: /Risk score \d+ out of 100/ }).isVisible(),
     "score gauge renders with accessible label",
@@ -94,17 +111,59 @@ for (const viewport of VIEWPORTS) {
     "disclaimer present",
   );
 
-  // Evidence must actually open.
-  const inspect = page.getByRole("button", { name: /Inspect evidence/i }).first();
-  if ((await inspect.count()) > 0) {
-    await inspect.click();
-    await page.waitForTimeout(250);
+  // ---- Evidence audit: exercise EVERY evidence action on the page ----
+  // This is the product's core trust feature, so it is checked exhaustively
+  // rather than by sampling one card.
+  // Clicking a trigger changes its accessible name, which would shift a live
+  // locator's indices mid-loop, so the stable aria-controls ids are collected
+  // first and each panel is then driven by its own id.
+  const panelIds = await page
+    .getByRole("button", { name: /Inspect evidence|Why not measured/i })
+    .evaluateAll((nodes) => nodes.map((n) => n.getAttribute("aria-controls")));
+
+  const triggerCount = panelIds.length;
+  check(triggerCount > 0, "at least one signal exposes its evidence");
+  check(
+    panelIds.every((id) => typeof id === "string" && id.length > 0),
+    "every evidence trigger is wired to a panel via aria-controls",
+  );
+
+  let opened = 0;
+  const broken = [];
+  for (const id of panelIds) {
+    if (!id) continue;
+    const selector = `[id="${id.replace(/"/g, '\\"')}"]`;
+    const trigger = page.locator(`[aria-controls="${id.replace(/"/g, '\\"')}"]`);
+    const panel = page.locator(selector);
+
+    await trigger.click();
+    await panel.waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
+
+    const visible = await panel.isVisible().catch(() => false);
+    const text = visible ? (await panel.innerText()).trim() : "";
+    const expanded = await trigger.getAttribute("aria-expanded");
+
+    if (visible && text.length > 0 && expanded === "true") opened += 1;
+    else broken.push(id);
+
+    await trigger.click();
+    await page.waitForTimeout(30);
+  }
+
+  check(
+    opened === triggerCount,
+    "every evidence action opens a non-empty panel",
+    `${opened}/${triggerCount}${broken.length ? ` · broken: ${broken.join(", ")}` : ""}`,
+  );
+
+  // An unmeasured signal must not offer "Inspect evidence" — that would imply
+  // a measurement exists.
+  const unmeasuredHeading = page.getByRole("heading", { name: /Could not be measured/i });
+  if ((await unmeasuredHeading.count()) > 0) {
     check(
-      (await page.getByRole("button", { name: /Hide evidence/i }).count()) > 0,
-      "evidence panel expands",
+      (await page.getByRole("button", { name: /Why not measured/i }).count()) > 0,
+      "unmeasured signals offer 'Why not measured', not 'Inspect evidence'",
     );
-  } else {
-    check(false, "at least one signal offers evidence");
   }
 
   // Mobile layouts must not scroll sideways.

@@ -75,7 +75,7 @@ export interface TokenOverview {
   socials: string[];
 }
 
-/** Per-category roll-up, used for the radar visualisation. */
+/** Per-category roll-up. Categories are the unit the overall score aggregates. */
 export interface CategoryScore {
   category: RiskCategory;
   points: number;
@@ -83,6 +83,43 @@ export interface CategoryScore {
   /** 0-100 risk within this category, or null when nothing was measurable. */
   percent: number | null;
   signalCount: number;
+  /** This category's weight in the overall score. */
+  weight: number;
+}
+
+/** How many signals landed in each severity bucket. */
+export interface SignalCounts {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  none: number;
+  unavailable: number;
+}
+
+/** A single headline concern, ranked by its actual contribution to the score. */
+export interface TopConcern {
+  id: string;
+  label: string;
+  observedValue: string;
+  severity: Severity;
+  category: RiskCategory;
+}
+
+/**
+ * The at-a-glance layer: everything needed to understand the verdict without
+ * reading the full report. Assembled deterministically from the signals.
+ */
+export interface RiskSummary {
+  counts: SignalCounts;
+  /** Up to three highest-contributing concerns. */
+  topConcerns: TopConcern[];
+  /** Categories at or above the driver threshold, worst first. */
+  drivers: RiskCategory[];
+  /** Categories clean enough to count as offsetting, cleanest first. */
+  offsets: RiskCategory[];
+  /** One sentence explaining why the score is what it is. */
+  rationale: string;
 }
 
 /** A single top holder, already classified. Rendered as the distribution table. */
@@ -103,6 +140,8 @@ export interface Distribution {
   burnedShare: number;
   topHolderShare: number | null;
   top10Share: number | null;
+  /** Holders 2-10 combined — the figure the spread signal actually scores. */
+  next9Share: number | null;
   reason?: string;
 }
 
@@ -115,6 +154,7 @@ export interface DataSourceStatus {
 export interface RiskReport {
   overview: TokenOverview;
   signals: RiskSignal[];
+  summary: RiskSummary;
   distribution: Distribution;
   categories: CategoryScore[];
   /** 0-100, where 100 is the most risk. `null` when nothing was measurable. */

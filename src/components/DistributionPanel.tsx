@@ -96,9 +96,13 @@ export default function DistributionPanel({
           hint="of circulating supply"
         />
         <Metric
-          label="Top 10 holders"
-          value={distribution.top10Share !== null ? formatPct(distribution.top10Share) : "—"}
-          hint="of circulating supply"
+          label="Holders 2–10"
+          value={distribution.next9Share !== null ? formatPct(distribution.next9Share) : "—"}
+          hint={
+            distribution.top10Share !== null
+              ? `top 10 combined: ${formatPct(distribution.top10Share)}`
+              : "of circulating supply"
+          }
         />
         <Metric
           label="In DEX pools"
@@ -197,6 +201,12 @@ export default function DistributionPanel({
         className="mt-5 pt-4 text-xs leading-relaxed space-y-1"
         style={{ borderTop: "1px solid var(--border)", color: "var(--muted)" }}
       >
+        <p>
+          The largest holder and holders 2&ndash;10 are scored separately because the
+          familiar &ldquo;top 10&rdquo; figure <em>contains</em> the largest holder — across
+          real tokens the two correlate at r&nbsp;=&nbsp;0.92, so charging both would count
+          one wallet twice. The top-10 total is still shown above for reference.
+        </p>
         <p>
           Pool and burn shares are measured across these {distribution.holders.length}{" "}
           accounts only. A token whose liquidity is spread thinly over many small pools can
