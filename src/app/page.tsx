@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 
 import AmbientBackground from "@/components/AmbientBackground";
 import LandingHero from "@/components/LandingHero";
+import SignalLanes from "@/components/SignalLanes";
 import SiteFooter from "@/components/SiteFooter";
 import TokenInputForm from "@/components/TokenInputForm";
 import ReportView from "@/components/ReportView";
@@ -73,11 +74,11 @@ export default function Home() {
               {status === "result" && report && <ReportView report={report} />}
             </>
           ) : (
-            <div className="mx-auto max-w-[1120px]">
+            <div className="mx-auto max-w-[1280px]">
               <LandingHero onAnalyze={analyze} loading={loading} />
               {/* Breathing room before the supporting section begins. */}
               <div className="mt-16 sm:mt-20">
-                {status === "idle" && <WhatGetsChecked />}
+                {status === "idle" && <SignalLanes />}
                 {loading && <ScanningState />}
                 {status === "error" && <ErrorState message={error} />}
               </div>
@@ -177,54 +178,6 @@ function RadarMark() {
         <circle cx="9" cy="9" r="1.35" fill="var(--accent)" />
       </svg>
     </span>
-  );
-}
-
-
-function WhatGetsChecked() {
-  const checks: [string, string][] = [
-    ["Authorities", "Can supply still be minted, wallets frozen, or transfers intercepted?"],
-    ["Holders", "How much of the sellable supply sits in the largest wallets?"],
-    ["Liquidity", "Is there a real market deep enough to exit into?"],
-    ["Market activity", "Is trading healthy, dormant, or suspiciously inflated?"],
-    ["Maturity", "How long have the token and its market actually existed?"],
-  ];
-
-  return (
-    <div className="rise">
-      <div className="eyebrow text-center mb-4">What gets checked</div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {checks.map(([title, description], index) => (
-          <div
-            key={title}
-            className={`card card-hover p-4 flex gap-3.5 ${
-              index === checks.length - 1 ? "sm:col-span-2" : ""
-            }`}
-          >
-            <span
-              aria-hidden="true"
-              className="tnum h-8 w-8 rounded-[9px] shrink-0 flex items-center justify-center text-[11px] font-semibold"
-              style={{
-                background: "rgba(56,214,236,0.08)",
-                border: "1px solid var(--line)",
-                color: "var(--accent)",
-              }}
-            >
-              {String(index + 1).padStart(2, "0")}
-            </span>
-            <div className="min-w-0">
-              <h3 className="font-medium text-sm">{title}</h3>
-              <p
-                className="text-[13px] mt-1 leading-relaxed"
-                style={{ color: "var(--ink-secondary)" }}
-              >
-                {description}
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
   );
 }
 

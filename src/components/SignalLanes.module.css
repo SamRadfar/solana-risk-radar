@@ -1,0 +1,275 @@
+/**
+ * Five Signal Lanes — the "what gets checked" system.
+ *
+ * Composed as one instrument divided into five sectors rather than five
+ * independent cards: a single signal line runs the full width with one node
+ * per lane sitting on it, hairline dividers separate the sectors *between*
+ * lanes only, and oversized low-opacity numerals sit behind as watermarks.
+ * There is deliberately no card fill and no enclosing frame — earlier work on
+ * this page established that translucent surfaces in this composition read as
+ * blocks pasted over the ambient background.
+ *
+ * The same system rotates on narrow screens: the signal line becomes a rail
+ * down the left and the nodes move to it, so the connected-system reading
+ * survives the stack instead of degrading into a list of cards.
+ *
+ * Scoped as a CSS Module, so the global stylesheet and the background system
+ * are untouched.
+ */
+
+.section {
+  position: relative;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 26px;
+}
+
+/*
+ * Wraps the line and the lanes together so the line is anchored to the lanes'
+ * own top edge. Anchored to the section instead, it sat level with the section
+ * heading and the nodes floated free of it.
+ */
+.rail {
+  position: relative;
+}
+
+/* The shared signal line. Horizontal on desktop; becomes the left rail below. */
+.line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(56, 214, 236, 0.18) 8%,
+    rgba(150, 190, 255, 0.22) 50%,
+    rgba(99, 102, 241, 0.18) 92%,
+    transparent 100%
+  );
+}
+
+.lanes {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.lane {
+  position: relative;
+  padding: 26px 20px 8px 20px;
+  isolation: isolate;
+}
+
+/* Dividers sit between sectors only, and fade out vertically so they read as
+   structure rather than as the sides of a box. */
+.lane + .lane::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.11) 0%,
+    rgba(255, 255, 255, 0.05) 55%,
+    transparent 100%
+  );
+}
+
+/* The illumination that appears under the hovered sector. */
+.lane::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(56, 214, 236, 0.1) 0%,
+    rgba(56, 214, 236, 0.03) 38%,
+    transparent 78%
+  );
+  transition: opacity 0.4s ease;
+}
+
+.lane:hover::after,
+.lane:focus-within::after {
+  opacity: 1;
+}
+
+/* Node on the signal line. */
+.node {
+  position: absolute;
+  top: -3px;
+  left: 20px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--canvas);
+  border: 1px solid rgba(150, 190, 255, 0.45);
+  transition:
+    background 0.35s ease,
+    border-color 0.35s ease,
+    box-shadow 0.35s ease;
+}
+
+.lane:hover .node,
+.lane:focus-within .node {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+/* Oversized watermark numeral. */
+.ghost {
+  position: absolute;
+  right: 12px;
+  top: 8px;
+  z-index: -1;
+  font-size: 68px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.032);
+  user-select: none;
+  transition: color 0.4s ease;
+}
+
+.lane:hover .ghost,
+.lane:focus-within .ghost {
+  color: rgba(56, 214, 236, 0.085);
+}
+
+.index {
+  display: block;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+  transition: color 0.35s ease;
+}
+
+.lane:hover .index,
+.lane:focus-within .index {
+  color: var(--accent);
+}
+
+.title {
+  margin-top: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.question {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-muted);
+  transition: color 0.35s ease;
+}
+
+.lane:hover .question,
+.lane:focus-within .question {
+  color: var(--ink-secondary);
+}
+
+/* ---------------------------------------------------------------------------
+   Below 5 comfortable columns, rotate the instrument rather than shrink the
+   type: the signal line becomes a rail down the left and the nodes ride it.
+--------------------------------------------------------------------------- */
+
+@media (max-width: 1023px) {
+  .lanes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .line {
+    left: 0;
+    right: auto;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    height: auto;
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgba(56, 214, 236, 0.2) 6%,
+      rgba(150, 190, 255, 0.22) 50%,
+      rgba(99, 102, 241, 0.18) 94%,
+      transparent 100%
+    );
+  }
+
+  .lane {
+    padding: 16px 0 16px 26px;
+  }
+
+  /* Dividers become horizontal separators between stacked sectors. */
+  .lane + .lane::before {
+    left: 26px;
+    right: 0;
+    top: 0;
+    bottom: auto;
+    width: auto;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.09) 0%,
+      transparent 70%
+    );
+  }
+
+  .lane::after {
+    background: linear-gradient(
+      90deg,
+      rgba(56, 214, 236, 0.09) 0%,
+      rgba(56, 214, 236, 0.02) 42%,
+      transparent 76%
+    );
+  }
+
+  .node {
+    top: 22px;
+    left: -3px;
+  }
+
+  .ghost {
+    font-size: 54px;
+    right: 4px;
+    top: 10px;
+  }
+}
+
+@media (max-width: 520px) {
+  .ghost {
+    font-size: 44px;
+  }
+
+  .question {
+    font-size: 12.5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lane::after,
+  .node,
+  .ghost,
+  .index,
+  .question {
+    transition: none;
+  }
+}

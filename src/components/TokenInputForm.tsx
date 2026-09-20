@@ -142,9 +142,29 @@ export default function TokenInputForm({
               aria-invalid={showError}
               aria-describedby={showError ? "mint-address-error" : undefined}
               className={`w-full min-w-0 bg-transparent outline-none font-mono ${
-                compact ? "py-2.5 text-[13px]" : "py-3 text-[15px]"
+                compact ? "py-2.5 text-[13px]" : "py-3 text-[14px]"
               }`}
-              style={{ color: "var(--ink)" }}
+              style={{
+                color: "var(--ink)",
+                /*
+                 * Mint addresses are 32-44 base58 characters. Slightly tighter
+                 * tracking fits a full address at the landing width without
+                 * shrinking the type further; the input keeps its native
+                 * horizontal scrolling for anything that still overflows.
+                 */
+                letterSpacing: "-0.01em",
+              }}
+              onPaste={(event) => {
+                /*
+                 * After a paste the caret sits at the end, so the field shows
+                 * the tail of the address. Scroll back to the start — checking
+                 * a pasted address means reading it from the beginning.
+                 */
+                const input = event.currentTarget;
+                requestAnimationFrame(() => {
+                  input.scrollLeft = 0;
+                });
+              }}
             />
           </div>
 

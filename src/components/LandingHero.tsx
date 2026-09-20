@@ -37,7 +37,9 @@ export default function LandingHero({
         which is fixed and full-viewport and therefore has no edge anywhere on
         screen to cut against.
       */}
-      <div className="grid items-start gap-10 lg:gap-14 lg:grid-cols-[1.18fr_0.82fr]">
+      {/* 56/44 — the analyser needs enough width to show a full 44-character
+          mint address without the field scrolling. */}
+      <div className="grid items-start gap-10 lg:gap-16 lg:grid-cols-[56fr_44fr]">
         <Message />
         <Analyser onAnalyze={onAnalyze} loading={loading} />
       </div>
