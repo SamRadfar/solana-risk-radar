@@ -48,3 +48,4 @@ next-env.d.ts
 /calibration-data.json
 /calibration-before.json
 /shots/
+/bg/

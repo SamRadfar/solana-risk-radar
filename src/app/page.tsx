@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 
+import AmbientBackground from "@/components/AmbientBackground";
 import TokenInputForm from "@/components/TokenInputForm";
 import ReportView from "@/components/ReportView";
 import type { RiskReport } from "@/lib/risk-engine/types";
@@ -54,7 +55,7 @@ export default function Home() {
 
   return (
     <>
-      <div className="ambient" aria-hidden="true" />
+      <AmbientBackground />
 
       <div className="relative z-10 min-h-screen flex flex-col">
         <SiteHeader onReset={reset} canReset={compactLayout} />

@@ -86,9 +86,24 @@ body {
 
 /* ---------------------------------------------------------------------------
    Ambient background.
-   Two fixed radial light sources plus a fine grid. Entirely CSS — no canvas,
-   no JS, no repaint cost while scrolling, and it cannot block interaction.
+
+   A fixed stack of layers behind all content. Structure and rationale live in
+   components/AmbientBackground.tsx; this file holds the paint.
+
+   Performance rules observed throughout:
+   - only `transform` and `opacity` are ever animated, so every moving layer
+     stays on the compositor and never triggers layout or paint;
+   - no `filter: blur()` on full-screen elements — the softness comes from the
+     radial gradients themselves, which cost nothing to keep soft;
+   - no blend modes, which would force an extra compositing group;
+   - the whole stack is `pointer-events: none` and cannot intercept input.
 --------------------------------------------------------------------------- */
+
+:root {
+  /* Written by the pointer parallax; safe defaults mean it works without JS. */
+  --pointer-x: 0;
+  --pointer-y: 0;
+}
 
 .ambient {
   position: fixed;
@@ -96,31 +111,217 @@ body {
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
+  /* Isolate the stack so nothing below can blend into page content. */
+  contain: strict;
 }
 
-.ambient::before {
-  content: "";
-  position: absolute;
-  inset: -20% -10% auto -10%;
-  height: 90vh;
-  background:
-    radial-gradient(60% 55% at 18% 0%, rgba(56, 214, 236, 0.13) 0%, transparent 70%),
-    radial-gradient(55% 50% at 82% 4%, rgba(99, 102, 241, 0.15) 0%, transparent 72%),
-    radial-gradient(80% 60% at 50% 0%, rgba(10, 14, 28, 0.9) 0%, transparent 80%);
-  filter: blur(6px);
-}
-
-/* Fine technical grid — reads as instrumentation, fades out down the page. */
-.ambient::after {
-  content: "";
+.ambient > * {
   position: absolute;
   inset: 0;
+}
+
+/* 1. Base wash — stops the canvas reading as flat black. */
+.ambient-base {
+  background:
+    radial-gradient(140% 90% at 50% -25%, #0d1426 0%, #070a13 45%, var(--canvas) 80%),
+    var(--canvas);
+}
+
+/* Parallax wrappers. `--depth` is set per layer in the markup. */
+.ambient-parallax {
+  transform: translate3d(
+    calc(var(--pointer-x) * var(--depth, 0px)),
+    calc(var(--pointer-y) * var(--depth, 0px)),
+    0
+  );
+  will-change: transform;
+}
+
+.ambient-glow {
+  position: absolute;
+  inset: 0;
+}
+
+/*
+ * 2. The two primary light sources.
+ *
+ * Both are anchored high on the page, behind the header and hero, and fall off
+ * well before the dense analysis content begins — colour never sits at
+ * strength behind body copy or evidence tables.
+ */
+.ambient-glow-a {
+  background: radial-gradient(
+    46% 40% at 20% 2%,
+    rgba(56, 214, 236, 0.16) 0%,
+    rgba(56, 214, 236, 0.06) 42%,
+    transparent 72%
+  );
+  animation: drift-a 48s ease-in-out infinite;
+}
+
+.ambient-glow-b {
+  background: radial-gradient(
+    44% 38% at 82% 0%,
+    rgba(99, 102, 241, 0.19) 0%,
+    rgba(120, 90, 240, 0.07) 44%,
+    transparent 74%
+  );
+  animation: drift-b 62s ease-in-out infinite;
+}
+
+/* 3. A faint violet low on the page — depth, not illumination. */
+.ambient-glow-c {
+  background: radial-gradient(
+    54% 30% at 62% 76%,
+    rgba(139, 92, 246, 0.07) 0%,
+    transparent 68%
+  );
+  animation: breathe 38s ease-in-out infinite;
+}
+
+/* 4. Technical mesh. Masked twice so it never reaches the content body. */
+.ambient-grid {
   background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.026) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.026) 1px, transparent 1px);
-  background-size: 64px 64px;
-  mask-image: linear-gradient(to bottom, black 0%, transparent 62%);
-  -webkit-mask-image: linear-gradient(to bottom, black 0%, transparent 62%);
+    linear-gradient(to right, rgba(190, 215, 255, 0.032) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(190, 215, 255, 0.032) 1px, transparent 1px);
+  background-size: 68px 68px;
+  mask-image:
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.9) 0%, transparent 58%),
+    radial-gradient(75% 55% at 50% 0%, #000 20%, transparent 100%);
+  -webkit-mask-image:
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.9) 0%, transparent 58%),
+    radial-gradient(75% 55% at 50% 0%, #000 20%, transparent 100%);
+  mask-composite: intersect;
+  -webkit-mask-composite: source-in;
+}
+
+/*
+ * 5. Content rails.
+ *
+ * Hairlines at the content column's own max width. On a wide monitor the
+ * margins stop reading as empty and start reading as framing — without
+ * touching the layout itself.
+ */
+.ambient-frame {
+  inset: 0;
+  max-width: 1500px;
+  margin: 0 auto;
+  border-left: 1px solid rgba(190, 215, 255, 0.05);
+  border-right: 1px solid rgba(190, 215, 255, 0.05);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, #000 52%, transparent 88%);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 12%,
+    #000 52%,
+    transparent 88%
+  );
+}
+
+/* Only meaningful once there is real margin to frame. */
+@media (max-width: 1560px) {
+  .ambient-frame {
+    display: none;
+  }
+}
+
+/*
+ * 6. Grain. A 120px tile repeated — small enough to rasterise once and stay in
+ * cache, and it removes the banding that large soft gradients show on 8-bit
+ * panels.
+ */
+.ambient-grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.022;
+}
+
+/* 7. Vignette — pulls the eye back to the centre column. */
+.ambient-vignette {
+  background: radial-gradient(
+    115% 80% at 50% 38%,
+    transparent 42%,
+    rgba(3, 4, 9, 0.5) 82%,
+    rgba(3, 4, 9, 0.78) 100%
+  );
+}
+
+/*
+ * Drift. Ranges are a few percent of the viewport over the better part of a
+ * minute — the page reads as alive without any movement being legible as
+ * movement.
+ */
+@keyframes drift-a {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(3.5%, 2%, 0) scale(1.07);
+  }
+}
+
+@keyframes drift-b {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.04);
+  }
+  50% {
+    transform: translate3d(-3%, 2.5%, 0) scale(1);
+  }
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+/*
+ * Mobile: drop the deep violet layer and the grain, and slow the drift. Small
+ * screens gain nothing from the extra layers and phones pay the most for
+ * full-screen compositing.
+ */
+@media (max-width: 640px) {
+  .ambient-glow-c,
+  .ambient-grain {
+    display: none;
+  }
+
+  .ambient-glow-a {
+    animation-duration: 70s;
+  }
+
+  .ambient-glow-b {
+    animation-duration: 84s;
+  }
+}
+
+/*
+ * Reduced motion: everything stops, nothing disappears. The composition is
+ * designed to look finished in its resting state, so a static page is still a
+ * deliberate one. The pointer listener is never attached in this mode.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .ambient-glow-a,
+  .ambient-glow-b,
+  .ambient-glow-c {
+    animation: none;
+  }
+
+  .ambient-glow-c {
+    opacity: 0.85;
+  }
+
+  .ambient-parallax {
+    transform: none;
+    will-change: auto;
+  }
 }
 
 /* ---------------------------------------------------------------------------
