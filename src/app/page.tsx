@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 
 import AmbientBackground from "@/components/AmbientBackground";
+import SiteFooter from "@/components/SiteFooter";
 import TokenInputForm from "@/components/TokenInputForm";
 import ReportView from "@/components/ReportView";
 import type { RiskReport } from "@/lib/risk-engine/types";
@@ -349,21 +350,3 @@ function ErrorState({ message }: { message: string }) {
   );
 }
 
-function SiteFooter() {
-  return (
-    <footer
-      className="relative z-10 mt-8"
-      style={{ borderTop: "1px solid var(--line)" }}
-    >
-      <div className="max-w-[1500px] mx-auto px-4 sm:px-6 py-7 text-[11px] leading-relaxed text-center sm:text-left sm:flex sm:items-center sm:justify-between gap-4">
-        <p style={{ color: "var(--ink-faint)" }}>
-          On-chain data from Solana RPC and the Metaplex / Token-2022 metadata standards.
-          Market data from DexScreener.
-        </p>
-        <p className="mt-2 sm:mt-0 shrink-0" style={{ color: "var(--ink-faint)" }}>
-          Built for the Superteam Germany Road to Colosseum Hackathon
-        </p>
-      </div>
-    </footer>
-  );
-}

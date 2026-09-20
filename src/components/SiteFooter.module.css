@@ -1,0 +1,411 @@
+/**
+ * Footer — "the end of the scan".
+ *
+ * A dark radar surface receding to a horizon: a CSS 3D perspective grid with
+ * light travelling across it, a soft horizon bloom, and a slow scan wave
+ * sweeping toward the viewer. It is the one place in the product allowed to be
+ * atmospheric, but it still has to belong to the same object, so the top edge
+ * dissolves into the page rather than cutting.
+ *
+ * Scoped as a CSS Module so the global stylesheet — and therefore the ambient
+ * background system — is not touched at all.
+ *
+ * Performance contract, same as the background: only `transform` and `opacity`
+ * are animated, nothing is blurred at full-screen size, there is no JavaScript
+ * whatsoever, and the whole scene is inert to pointer input.
+ */
+
+.footer {
+  position: relative;
+  z-index: 10;
+  margin-top: 64px;
+  /* The rotated plane extends past the viewport; clip it. */
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.scene {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/*
+ * Transition in.
+ *
+ * A tall wash of the page's own canvas colour over the top of the scene, so
+ * the grid emerges out of the page instead of starting at a hard line. The
+ * hairline is masked to fade at both ends — a seam, not a border.
+ */
+.seam {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 30%;
+  background: linear-gradient(
+    to bottom,
+    var(--canvas) 0%,
+    rgba(5, 6, 10, 0.72) 42%,
+    transparent 100%
+  );
+  z-index: 4;
+}
+
+.seamLine {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(190, 215, 255, 0.1) 26%,
+    rgba(56, 214, 236, 0.22) 50%,
+    rgba(190, 215, 255, 0.1) 74%,
+    transparent 100%
+  );
+  z-index: 5;
+}
+
+/* ---------------------------------------------------------------------------
+   The perspective grid
+--------------------------------------------------------------------------- */
+
+.stage {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 250px;
+  perspective: 260px;
+  perspective-origin: 50% 0%;
+  z-index: 1;
+  overflow: hidden;
+}
+
+/*
+ * The floor's fade toward the horizon and the side edges.
+ *
+ * Deliberately an overlay rather than a mask on `.stage`: masking a
+ * 3D-transformed subtree forces the compositor to allocate and read back a
+ * render surface on every frame, which measured as a page-wide frame-time
+ * regression. Painting the canvas colour over the grid is visually identical
+ * here — the backdrop is that colour — and costs one flat paint.
+ */
+.floorFade {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 250px;
+  z-index: 2;
+  background:
+    linear-gradient(to bottom, var(--canvas) 0%, rgba(5, 6, 10, 0.35) 26%, transparent 52%),
+    linear-gradient(to right, var(--canvas) 0%, transparent 18%, transparent 82%, var(--canvas) 100%);
+}
+
+.plane {
+  position: absolute;
+  top: 0;
+  left: -40%;
+  width: 180%;
+  height: 190%;
+  transform-origin: 50% 0%;
+  transform: rotateX(72deg);
+}
+
+/*
+ * The lines themselves. Separated from the rotated plane so the travel
+ * animation is a plain translate the compositor can own outright, and so the
+ * 3D transform never has to be recomputed per frame.
+ *
+ * Travelling exactly one cell makes the loop seamless.
+ */
+.lines {
+  position: absolute;
+  inset: -60px 0 0 0;
+  background-image:
+    linear-gradient(to right, rgba(128, 206, 240, 0.28) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(128, 206, 240, 0.28) 1px, transparent 1px);
+  background-size: 62px 62px;
+  animation: travel 9s linear infinite;
+}
+
+@keyframes travel {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 62px, 0);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Light
+--------------------------------------------------------------------------- */
+
+/* Horizon bloom — the light source the grid recedes into. */
+.horizon {
+  position: absolute;
+  left: 50%;
+  bottom: 196px;
+  width: 160%;
+  height: 128px;
+  transform: translateX(-50%);
+  background:
+    radial-gradient(42% 78% at 50% 100%, rgba(56, 214, 236, 0.3) 0%, transparent 72%),
+    radial-gradient(64% 92% at 28% 100%, rgba(99, 102, 241, 0.22) 0%, transparent 74%),
+    radial-gradient(64% 92% at 72% 100%, rgba(139, 92, 246, 0.2) 0%, transparent 76%);
+  z-index: 3;
+  animation: bloom 26s ease-in-out infinite;
+}
+
+/* A hairline of light exactly on the horizon, so the surface reads as a plane. */
+.horizonLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 250px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(56, 214, 236, 0.32) 34%,
+    rgba(167, 139, 250, 0.4) 50%,
+    rgba(56, 214, 236, 0.32) 66%,
+    transparent 100%
+  );
+  z-index: 4;
+  animation: bloom 26s ease-in-out infinite;
+}
+
+@keyframes bloom {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/*
+ * The scan wave.
+ *
+ * One soft band travelling from the horizon toward the viewer, on a long
+ * cycle with a long dwell at low opacity — so it reads as an occasional sweep
+ * rather than a pulse.
+ */
+.sweep {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  bottom: 0;
+  height: 250px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(56, 214, 236, 0.07) 38%,
+    rgba(167, 139, 250, 0.09) 52%,
+    transparent 100%
+  );
+  z-index: 4;
+  animation: sweep 17s cubic-bezier(0.4, 0, 0.5, 1) infinite;
+}
+
+@keyframes sweep {
+  0% {
+    transform: translate3d(0, -30%, 0) scaleY(0.6);
+    opacity: 0;
+  }
+  14% {
+    opacity: 0.9;
+  }
+  62% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translate3d(0, 210%, 0) scaleY(1.5);
+    opacity: 0;
+  }
+}
+
+/* Keeps the type unambiguously dominant over the light beneath it. */
+.veil {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      to bottom,
+      rgba(5, 6, 10, 0.5) 0%,
+      rgba(5, 6, 10, 0.26) 36%,
+      transparent 60%
+    ),
+    radial-gradient(52% 34% at 50% 34%, rgba(5, 6, 10, 0.5) 0%, transparent 78%);
+  z-index: 6;
+}
+
+/* ---------------------------------------------------------------------------
+   Content
+--------------------------------------------------------------------------- */
+
+.content {
+  position: relative;
+  z-index: 7;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 96px 24px 306px;
+  text-align: center;
+}
+
+.wordmark {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--ink);
+}
+
+.tagline {
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--ink-secondary);
+}
+
+.rule {
+  width: 52px;
+  height: 1px;
+  margin: 22px auto;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(56, 214, 236, 0.5),
+    transparent
+  );
+}
+
+.credit {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-secondary);
+}
+
+.provenance {
+  margin-top: 14px;
+  font-size: 11px;
+  line-height: 1.7;
+  /*
+   * A footer-local step between --ink-muted and --ink-secondary: muted sits at
+   * 4.49:1 on this canvas, a hair under AA for small text, while secondary
+   * would make the provenance compete with the credit line above it. This
+   * measures ~6.3:1 and keeps the hierarchy intact. Global tokens unchanged.
+   */
+  color: #8891a4;
+  max-width: 46ch;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---------------------------------------------------------------------------
+   Responsive
+--------------------------------------------------------------------------- */
+
+@media (min-width: 1024px) {
+  .content {
+    padding-top: 112px;
+    padding-bottom: 322px;
+  }
+
+  .wordmark {
+    font-size: 38px;
+  }
+}
+
+/*
+ * Mobile keeps the depth but spends less on it: a coarser grid (fewer lines to
+ * rasterise), a shallower tilt so the surface still reads at a small size, and
+ * no scan wave.
+ */
+@media (max-width: 640px) {
+  .footer {
+    margin-top: 40px;
+  }
+
+  .content {
+    padding: 76px 20px 228px;
+  }
+
+  .wordmark {
+    font-size: 24px;
+  }
+
+  .tagline {
+    font-size: 13px;
+  }
+
+  .stage {
+    height: 172px;
+  }
+
+  .floorFade {
+    height: 172px;
+  }
+
+  .horizonLine {
+    bottom: 172px;
+  }
+
+  .horizon {
+    bottom: 132px;
+    height: 96px;
+  }
+
+  .sweep {
+    height: 172px;
+  }
+
+  .lines {
+    background-size: 76px 76px;
+  }
+
+  .plane {
+    transform: rotateX(66deg);
+  }
+
+  .sweep {
+    display: none;
+  }
+
+  @keyframes travel {
+    from {
+      transform: translate3d(0, 0, 0);
+    }
+    to {
+      transform: translate3d(0, 76px, 0);
+    }
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Reduced motion — everything stops, nothing disappears.
+   The composition is designed to be complete at rest: the grid, the horizon
+   bloom and the scan wave all remain, simply held still at a legible phase.
+--------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .lines,
+  .horizon,
+  .horizonLine,
+  .sweep {
+    animation: none;
+  }
+
+  .sweep {
+    /* Parked mid-surface at a resting intensity rather than hidden. */
+    transform: translate3d(0, 46%, 0);
+    opacity: 0.5;
+  }
+
+  .horizon,
+  .horizonLine {
+    opacity: 0.92;
+  }
+}
