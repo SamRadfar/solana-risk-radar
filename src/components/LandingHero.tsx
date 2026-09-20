@@ -23,24 +23,20 @@ export default function LandingHero({
   return (
     <section className="relative rise">
       {/*
-        The connective tissue: one soft light source centred between the
-        columns, bleeding under both. Purely decorative and inert — the ambient
-        background system is untouched and still runs behind all of this.
-      */}
-      <div
-        aria-hidden="true"
-        /*
-          Kept inside the section's own box: bleeding it sideways widened the
-          document and introduced horizontal scroll on narrow viewports. The
-          radial falloff already carries the light past the columns visually.
-        */
-        className="pointer-events-none absolute inset-x-0 -top-20 bottom-0 -z-10"
-        style={{
-          background:
-            "radial-gradient(48% 52% at 62% 28%, rgba(56,214,236,0.10) 0%, transparent 70%), radial-gradient(42% 48% at 88% 16%, rgba(99,102,241,0.12) 0%, transparent 72%)",
-        }}
-      />
+        No hero-local background layer by design.
+        
+        There used to be a "connective" glow here, spanning the section box.
+        Because that box is the 1120px content column, and the gradient was
+        still near full strength when it reached the box's right edge, the
+        light was sliced off in a straight vertical line right beside the
+        analyser — the seam that made the right half look like a separate
+        block. Measured as the strongest persistent vertical edge in the whole
+        hero; removing this layer removed it entirely.
 
+        The atmosphere now comes solely from the global ambient background,
+        which is fixed and full-viewport and therefore has no edge anywhere on
+        screen to cut against.
+      */}
       <div className="grid items-start gap-10 lg:gap-14 lg:grid-cols-[1.18fr_0.82fr]">
         <Message />
         <Analyser onAnalyze={onAnalyze} loading={loading} />
@@ -135,36 +131,17 @@ function Analyser({
 }) {
   return (
     /*
-     * Frameless by design.
+     * Completely unframed: no fill, no border, no wash, no shadow — just the
+     * interface elements sitting directly on the hero. Every enclosing surface
+     * this block has had (an opaque card, then a box-shadow, then a radial
+     * haze) reintroduced a rectangle behind the analyser, so there is now no
+     * enclosing surface at all. The glass field below is the only treated
+     * element.
      *
-     * This was a `card`, which painted rgba(19,22,32,0.72) — a 72%-opaque dark
-     * rectangle — straight over the hero's ambient light, so the gradient
-     * visibly stopped at the panel edges and the right half read as a separate
-     * block pasted on top. There is now no fill, no border and no lit edge:
-     * just a radial wash that fades to fully transparent before it reaches any
-     * edge, so the hero's atmosphere passes through uninterrupted and the
-     * group reads as floating in the same scene.
-     *
-     * The lg offset drops the panel so its top sits with the headline rather
+     * The lg offset drops the group so its top sits with the headline rather
      * than 79px above it, balancing it against the left column's visual mass.
      */
     <div className="relative lg:mt-16 p-5 sm:p-7">
-      {/*
-        The light is an ellipse, not a box shadow. A box-shadow — however soft —
-        is painted around the element's rectangle, which is what was still
-        reading as a block behind the analyser. This gradient reaches full
-        transparency at 76% of its radii, well inside its own bounds, so it has
-        no edges and no corners to see.
-      */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 64% at 50% 34%, rgba(255,255,255,0.055) 0%, rgba(126,214,236,0.022) 44%, transparent 76%)",
-        }}
-      />
-
       <h2 className="text-[17px] font-semibold">Analyse a token</h2>
       <p className="mt-1.5 text-[13px] leading-relaxed" style={{ color: "var(--ink-muted)" }}>
         Paste a Solana mint address to inspect its risk signals.
