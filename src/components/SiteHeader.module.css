@@ -1,0 +1,296 @@
+/**
+ * Site header — minimal glass navigation.
+ *
+ * Two states, driven by scroll position: at the top of the page the bar is
+ * nearly absent so the hero owns the screen; once the page moves it settles
+ * into frosted glass with a visible hairline. The transition is a property
+ * change, not a size change — nothing reflows, and the header never shrinks or
+ * jumps.
+ *
+ * Scoped as a CSS Module so the global stylesheet and the background system
+ * stay untouched. The one exception is the shared `--header-h` token, which
+ * the sticky rail and every section anchor also read, so it has to remain the
+ * single source of truth for the bar's height.
+ */
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  height: var(--header-h);
+  background: rgba(5, 6, 10, 0.34);
+  /* Prefixed first, standard last: the CSS minifier de-duplicates these two
+     and keeps whichever comes second, so declaring the standard property last
+     is what makes it survive into the served stylesheet. */
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
+  backdrop-filter: blur(10px) saturate(130%);
+  border-bottom: 1px solid transparent;
+  transition:
+    background 0.35s ease,
+    backdrop-filter 0.35s ease,
+    border-color 0.35s ease;
+}
+
+.scrolled {
+  background: rgba(5, 6, 10, 0.74);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
+  border-bottom-color: var(--line);
+}
+
+/* A whisper of the product accent along the bottom edge once settled. */
+.header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  opacity: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(56, 214, 236, 0.22) 30%,
+    rgba(99, 102, 241, 0.2) 70%,
+    transparent 100%
+  );
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+
+.scrolled::after {
+  opacity: 1;
+}
+
+.inner {
+  height: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+/* --------------------------------------------------------------------------
+   Brand
+-------------------------------------------------------------------------- */
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  text-align: left;
+  border-radius: 10px;
+  padding: 4px 6px 4px 4px;
+  margin-left: -4px;
+  transition: opacity 0.2s ease;
+}
+
+.brandAction {
+  cursor: pointer;
+}
+
+.brandAction:hover {
+  opacity: 0.85;
+}
+
+.mark {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    linear-gradient(150deg, rgba(56, 214, 236, 0.16), rgba(99, 102, 241, 0.14)),
+    rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* A soft halo so the mark reads as the one lit object in the bar. */
+.mark::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 15px;
+  background: radial-gradient(60% 60% at 50% 40%, rgba(56, 214, 236, 0.22), transparent 70%);
+  z-index: -1;
+}
+
+.brandText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.name {
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.tagline {
+  font-size: 11px;
+  line-height: 1.25;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Navigation
+-------------------------------------------------------------------------- */
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 12px;
+}
+
+.navLink {
+  position: relative;
+  font-size: 13px;
+  color: var(--ink-muted);
+  padding: 9px 11px;
+  border-radius: 9px;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease;
+}
+
+.navLink:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+/* --------------------------------------------------------------------------
+   Trust / status group — metadata, not buttons
+-------------------------------------------------------------------------- */
+
+.trust {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  background: rgba(255, 255, 255, 0.022);
+}
+
+.trustItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+.dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+
+.sep {
+  width: 1px;
+  height: 11px;
+  background: rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------------------
+   CTA
+-------------------------------------------------------------------------- */
+
+.cta {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 15px;
+  border-radius: 10px;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--accent-ink);
+  background: var(--accent-grad-btn);
+  box-shadow: 0 6px 20px -12px var(--accent-glow);
+  transition:
+    filter 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.12s ease;
+}
+
+.cta:hover {
+  filter: brightness(1.07);
+  box-shadow: 0 10px 26px -12px var(--accent-glow);
+}
+
+.cta:active {
+  transform: translateY(1px);
+}
+
+/* --------------------------------------------------------------------------
+   Responsive — shed secondary elements, never the brand or the CTA
+-------------------------------------------------------------------------- */
+
+/* Tablet: the tagline and one trust item go before anything structural. */
+@media (max-width: 1100px) {
+  .tagline {
+    display: none;
+  }
+
+  .trustOptional {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .trust {
+    display: none;
+  }
+}
+
+@media (max-width: 680px) {
+  .nav {
+    display: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .inner {
+    padding: 0 16px;
+    gap: 12px;
+  }
+
+  .name {
+    font-size: 13.5px;
+  }
+
+  .cta {
+    padding: 8px 12px;
+    font-size: 12.5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .header,
+  .header::after,
+  .navLink,
+  .cta,
+  .brand {
+    transition: none;
+  }
+}

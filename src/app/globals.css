@@ -63,7 +63,9 @@
   --radius: 16px;
   --radius-lg: 22px;
   --radius-sm: 10px;
-  --header-h: 60px;
+  /* Single source of truth: the sticky rail's offset and every section
+     anchor's scroll-margin read this too, so the bar's height lives here. */
+  --header-h: 68px;
 }
 
 * {

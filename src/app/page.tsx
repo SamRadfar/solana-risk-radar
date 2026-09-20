@@ -5,6 +5,7 @@ import { useCallback, useState } from "react";
 import AmbientBackground from "@/components/AmbientBackground";
 import LandingHero from "@/components/LandingHero";
 import SignalLanes from "@/components/SignalLanes";
+import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import TokenInputForm from "@/components/TokenInputForm";
 import ReportView from "@/components/ReportView";
@@ -61,7 +62,7 @@ export default function Home() {
       <AmbientBackground />
 
       <div className="relative z-10 min-h-screen flex flex-col">
-        <SiteHeader onReset={reset} canReset={compactLayout} />
+        <SiteHeader mode={compactLayout ? "result" : "landing"} onReset={reset} />
 
         <main className="flex-1 w-full mx-auto px-4 sm:px-6 py-8 sm:py-10 max-w-[1500px]">
           {compactLayout ? (
@@ -93,93 +94,6 @@ export default function Home() {
 }
 
 /* -------------------------------------------------------------------------- */
-
-function SiteHeader({
-  onReset,
-  canReset,
-}: {
-  onReset: () => void;
-  canReset: boolean;
-}) {
-  return (
-    <header
-      className="sticky top-0 z-40"
-      style={{
-        height: "var(--header-h)",
-        background: "rgba(5,6,10,0.72)",
-        backdropFilter: "blur(16px)",
-        WebkitBackdropFilter: "blur(16px)",
-        borderBottom: "1px solid var(--line)",
-      }}
-    >
-      <div className="h-full max-w-[1500px] mx-auto px-4 sm:px-6 flex items-center justify-between gap-4">
-        <button
-          type="button"
-          onClick={onReset}
-          disabled={!canReset}
-          aria-label={canReset ? "Start a new analysis" : "Solana Risk Radar"}
-          className={`flex items-center gap-2.5 min-w-0 text-left ${
-            canReset ? "cursor-pointer" : "cursor-default"
-          }`}
-        >
-          <RadarMark />
-          <span className="min-w-0">
-            <span className="block font-semibold text-[14px] leading-tight truncate">
-              Solana Risk Radar
-            </span>
-            <span
-              className="hidden sm:block text-[11px] leading-tight"
-              style={{ color: "var(--ink-muted)" }}
-            >
-              Deterministic risk signals, not predictions
-            </span>
-          </span>
-        </button>
-
-        <div className="hidden md:flex items-center gap-2 text-[11px]">
-          <Pill>Deterministic</Pill>
-          <Pill>No API keys</Pill>
-          <Pill>Evidence-backed</Pill>
-        </div>
-      </div>
-    </header>
-  );
-}
-
-function Pill({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      className="px-2.5 py-1 rounded-full"
-      style={{
-        border: "1px solid var(--line)",
-        background: "rgba(255,255,255,0.03)",
-        color: "var(--ink-muted)",
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
-function RadarMark() {
-  return (
-    <span
-      className="relative h-8 w-8 rounded-[10px] flex items-center justify-center shrink-0"
-      style={{
-        background: "linear-gradient(140deg, rgba(56,214,236,0.18), rgba(99,102,241,0.18))",
-        border: "1px solid var(--line-strong)",
-      }}
-      aria-hidden="true"
-    >
-      <svg width="17" height="17" viewBox="0 0 18 18" fill="none">
-        <circle cx="9" cy="9" r="7" stroke="rgba(255,255,255,0.22)" strokeWidth="1.1" />
-        <circle cx="9" cy="9" r="3.6" stroke="rgba(255,255,255,0.22)" strokeWidth="1.1" />
-        <path d="M9 9L14.2 5.2" stroke="var(--accent)" strokeWidth="1.6" strokeLinecap="round" />
-        <circle cx="9" cy="9" r="1.35" fill="var(--accent)" />
-      </svg>
-    </span>
-  );
-}
 
 function ScanningState() {
   const stages = [
