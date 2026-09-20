@@ -9,6 +9,19 @@ interface Props {
   loading: boolean;
   /** Compact variant used once a report is on screen. */
   compact?: boolean;
+  /**
+   * Renders the field as a recessed well rather than a raised card, for use
+   * inside another surface (the landing analyser panel). Defaults to false, so
+   * every existing call site is unaffected.
+   */
+  inset?: boolean;
+  /**
+   * Stacks the field above a full-width action instead of placing them on one
+   * row. The row layout keys off *viewport* breakpoints, which misreads a
+   * narrow container on a wide screen — inside the landing analyser panel that
+   * squeezed the field until the placeholder truncated. Defaults to false.
+   */
+  stack?: boolean;
 }
 
 const EXAMPLES = [
@@ -26,7 +39,13 @@ const EXAMPLES = [
  * server still re-validates, because client-side checks are a convenience and
  * never a trust boundary.
  */
-export default function TokenInputForm({ onAnalyze, loading, compact = false }: Props) {
+export default function TokenInputForm({
+  onAnalyze,
+  loading,
+  compact = false,
+  inset = false,
+  stack = false,
+}: Props) {
   const [value, setValue] = useState("");
   const [touched, setTouched] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -66,7 +85,9 @@ export default function TokenInputForm({ onAnalyze, loading, compact = false }: 
         }}
       >
         <div
-          className="card flex flex-col sm:flex-row gap-2 p-2 transition-colors"
+          className={`${inset ? "inset" : "card"} flex ${
+            stack ? "flex-col" : "flex-col sm:flex-row"
+          } gap-2 p-2 transition-colors`}
           style={{
             borderColor: showError
               ? "rgba(229,72,77,0.5)"
@@ -111,7 +132,7 @@ export default function TokenInputForm({ onAnalyze, loading, compact = false }: 
             disabled={!canSubmit}
             className={`btn-accent cursor-pointer whitespace-nowrap ${
               compact ? "px-4 py-2.5 text-[13px]" : "px-6 py-3 text-[15px]"
-            }`}
+            } ${stack ? "w-full" : ""}`}
           >
             {loading ? "Analysing…" : "Analyse"}
           </button>

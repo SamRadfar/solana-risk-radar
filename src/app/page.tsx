@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 
 import AmbientBackground from "@/components/AmbientBackground";
+import LandingHero from "@/components/LandingHero";
 import SiteFooter from "@/components/SiteFooter";
 import TokenInputForm from "@/components/TokenInputForm";
 import ReportView from "@/components/ReportView";
@@ -72,12 +73,10 @@ export default function Home() {
               {status === "result" && report && <ReportView report={report} />}
             </>
           ) : (
-            <div className="max-w-3xl mx-auto">
-              <Hero />
-              <div className="mt-8">
-                <TokenInputForm onAnalyze={analyze} loading={loading} />
-              </div>
-              <div className="mt-10">
+            <div className="mx-auto max-w-[1120px]">
+              <LandingHero onAnalyze={analyze} loading={loading} />
+              {/* Breathing room before the supporting section begins. */}
+              <div className="mt-16 sm:mt-20">
                 {status === "idle" && <WhatGetsChecked />}
                 {loading && <ScanningState />}
                 {status === "error" && <ErrorState message={error} />}
@@ -181,45 +180,6 @@ function RadarMark() {
   );
 }
 
-function Hero() {
-  return (
-    <div className="text-center rise">
-      <span
-        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px]"
-        style={{
-          border: "1px solid var(--line)",
-          background: "rgba(255,255,255,0.03)",
-          color: "var(--ink-secondary)",
-        }}
-      >
-        <span
-          aria-hidden="true"
-          className="h-1.5 w-1.5 rounded-full"
-          style={{ background: "var(--accent)", boxShadow: "0 0 8px var(--accent-glow)" }}
-        />
-        14 deterministic signals · 5 risk categories
-      </span>
-
-      <h1
-        className="mt-5 display text-[38px] sm:text-[56px] font-semibold"
-        style={{ color: "#fff" }}
-      >
-        Know a token&rsquo;s risk
-        <br />
-        <span className="grad-text">before you touch it</span>
-      </h1>
-
-      <p
-        className="mt-5 text-[15px] sm:text-[17px] leading-relaxed max-w-xl mx-auto"
-        style={{ color: "var(--ink-secondary)" }}
-      >
-        Paste any Solana mint address. Risk Radar reads real on-chain and market data, scores
-        it with a transparent rule engine, and shows you exactly which signals drove the
-        result — with the evidence behind every one.
-      </p>
-    </div>
-  );
-}
 
 function WhatGetsChecked() {
   const checks: [string, string][] = [
