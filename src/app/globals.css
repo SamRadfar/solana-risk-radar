@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+:root {
+  --background: #08090c;
+  --surface: #0e1015;
+  --surface-2: #14171e;
+  --border: #23262f;
+  --foreground: #e8eaf0;
+  --muted: #8c92a4;
+  --accent: #5eead4;
+  --accent-dim: #2dd4bf;
+  --risk-none: #3fb950;
+  --risk-low: #7ee787;
+  --risk-medium: #e3b341;
+  --risk-high: #f0883e;
+  --risk-critical: #f85149;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-mono {
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
+::selection {
+  background: var(--accent-dim);
+  color: #06231f;
+}
+
+.font-mono-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(94, 234, 212, 0.35);
+  }
+  100% {
+    box-shadow: 0 0 0 12px rgba(94, 234, 212, 0);
+  }
+}
