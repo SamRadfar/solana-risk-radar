@@ -1,4 +1,5 @@
 import {
+  canonicalPair,
   fullyDilutedValuation,
   priceChange24h,
   totalLiquidity,
@@ -424,6 +425,8 @@ export function buildRiskReport(
       liquidityUsd: input.marketData.available ? totalLiquidity(input.marketData) : null,
       volume24hUsd: input.marketData.available ? totalVolume24h(input.marketData) : null,
       poolCount: input.marketData.pairs.length,
+      poolAddress: canonicalPair(input.marketData)?.pairAddress ?? null,
+      poolDex: canonicalPair(input.marketData)?.dexId ?? null,
     },
     generatedAt: new Date().toISOString(),
     elapsedMs,

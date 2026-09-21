@@ -8,6 +8,7 @@ import {
 import { explorerTokenUrl } from "@/lib/solana/knownAddresses";
 import { formatNumber, formatPrice, formatUsd, truncateAddress } from "@/lib/format";
 
+import MarketContextChart from "./MarketContextChart";
 import ScoreDial from "./ScoreDial";
 
 /**
@@ -18,6 +19,13 @@ import ScoreDial from "./ScoreDial";
  * how many findings there are and which three mattered most. The sticky rail
  * echoes a condensed version of this for scroll context; the detail below
  * carries the argument.
+ *
+ * The upper half is split: the verdict on the left, four hours of price
+ * movement on the right. The chart is context and is labelled as such — it is
+ * never an input to the score, and it sits beside the verdict rather than
+ * inside it so the two are not read as one claim. Everything below the split
+ * — the main concerns, the token facts, the links — stays full width, because
+ * those are the verdict's own supporting detail.
  */
 export default function VerdictHero({ report }: { report: RiskReport }) {
   const { overview, summary } = report;
@@ -45,8 +53,9 @@ export default function VerdictHero({ report }: { report: RiskReport }) {
       />
 
       <div className="relative p-6 sm:p-8">
-        <div className="flex flex-col lg:flex-row lg:items-center gap-7 lg:gap-10">
-          <div className="flex justify-center lg:justify-start shrink-0">
+        <div className="grid gap-7 lg:gap-8 lg:grid-cols-[60fr_40fr] items-stretch">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-7 lg:gap-8">
+          <div className="flex justify-center sm:justify-start shrink-0">
             <ScoreDial
               score={report.score}
               classification={report.classification}
@@ -143,6 +152,9 @@ export default function VerdictHero({ report }: { report: RiskReport }) {
               })}
             </div>
           </div>
+          </div>
+
+          <MarketContextChart report={report} />
         </div>
 
         {/* Main concerns */}

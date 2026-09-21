@@ -218,6 +218,17 @@ export function marketCap(market: MarketData): number | null {
   return null;
 }
 
+/**
+ * The pool the canonical price is read from.
+ *
+ * Exactly the pool `spotPrice` selects, exposed so that anything needing to
+ * name that market — price history, a link out to it — reads the same one
+ * rather than forming a second opinion about which market counts.
+ */
+export function canonicalPair(market: MarketData): MarketPair | null {
+  return pairsByLiquidity(market).find((pair) => pair.priceUsd !== null) ?? null;
+}
+
 /** Spot price from the deepest pool that reports one. */
 export function spotPrice(market: MarketData): number | null {
   return pairsByLiquidity(market).find((pair) => pair.priceUsd !== null)?.priceUsd ?? null;

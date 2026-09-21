@@ -167,6 +167,14 @@ export interface MarketSnapshot {
   liquidityUsd: number | null;
   volume24hUsd: number | null;
   poolCount: number;
+  /**
+   * The pool the canonical price came from. Carried so the market-context
+   * chart reads the same market the price does, and so that reading stays
+   * traceable to a source.
+   */
+  poolAddress: string | null;
+  /** That pool's DEX, for attribution. */
+  poolDex: string | null;
 }
 
 export interface DataSourceStatus {
