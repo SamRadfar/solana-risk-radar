@@ -1,3 +1,4 @@
+import Reveal from "./Reveal";
 import TokenInputForm from "./TokenInputForm";
 
 /**
@@ -12,6 +13,10 @@ import TokenInputForm from "./TokenInputForm";
  * they share a top alignment and vertical rhythm, and the analyser panel sits
  * in a glow that bleeds left underneath the message, so the eye reads one
  * composition with two jobs instead of two unrelated boxes.
+ *
+ * The composition is unchanged; only its arrival is staged. Each element
+ * renders as itself with a reveal attached, so nothing here is wrapped and no
+ * box, margin or grid track moves.
  */
 export default function LandingHero({
   onAnalyze,
@@ -21,7 +26,7 @@ export default function LandingHero({
   loading: boolean;
 }) {
   return (
-    <section className="relative rise">
+    <section className="relative">
       {/*
         No hero-local background layer by design.
         
@@ -58,7 +63,8 @@ function Message() {
 
   return (
     <div className="lg:pt-6">
-      <span
+      <Reveal
+        as="span"
         className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px]"
         style={{
           border: "1px solid var(--line)",
@@ -72,14 +78,16 @@ function Message() {
           style={{ background: "var(--accent)", boxShadow: "0 0 8px var(--accent-glow)" }}
         />
         14 deterministic signals · 5 risk categories
-      </span>
+      </Reveal>
 
       {/*
         Left-aligned and set considerably larger than the old centred version.
         The line break is authored rather than left to wrapping, so the gradient
         always lands on the second line at every width.
       */}
-      <h1
+      <Reveal
+        as="h1"
+        delay={90}
         /*
           The base size is set so "Know a token's risk" still holds one line at
           390px; at 42px it wrapped and orphaned "risk" above the gradient line,
@@ -91,16 +99,18 @@ function Message() {
         Know a token&rsquo;s risk
         <br />
         <span className="grad-text">before you touch it</span>
-      </h1>
+      </Reveal>
 
-      <p
+      <Reveal
+        as="p"
+        delay={180}
         className="mt-6 text-[15px] sm:text-base leading-relaxed max-w-[46ch]"
         style={{ color: "var(--ink-secondary)" }}
       >
         Paste a Solana mint address and get an explainable risk report in seconds.
-      </p>
+      </Reveal>
 
-      <ul className="mt-6 space-y-2.5">
+      <Reveal as="ul" stagger delay={260} step={80} className="mt-6 space-y-2.5">
         {points.map((point) => (
           <li key={point} className="flex items-center gap-3 text-[14px]">
             <span
@@ -117,7 +127,7 @@ function Message() {
             <span style={{ color: "var(--ink)" }}>{point}</span>
           </li>
         ))}
-      </ul>
+      </Reveal>
     </div>
   );
 }
@@ -143,7 +153,7 @@ function Analyser({
      * The lg offset drops the group so its top sits with the headline rather
      * than 79px above it, balancing it against the left column's visual mass.
      */
-    <div className="relative lg:mt-16 p-5 sm:p-7">
+    <Reveal delay={240} className="relative lg:mt-16 p-5 sm:p-7">
       <h2 className="text-[17px] font-semibold">Analyse a token</h2>
       <p className="mt-1.5 text-[13px] leading-relaxed" style={{ color: "var(--ink-muted)" }}>
         Paste a Solana mint address to inspect its risk signals.
@@ -173,7 +183,7 @@ function Analyser({
         <Trust>No wallet required</Trust>
         <Trust>Evidence-backed</Trust>
       </div>
-    </div>
+    </Reveal>
   );
 }
 

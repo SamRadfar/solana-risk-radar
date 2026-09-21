@@ -1,3 +1,4 @@
+import Reveal from "./Reveal";
 import styles from "./SignalLanes.module.css";
 
 /**
@@ -40,19 +41,19 @@ const LANES: { title: string; question: string }[] = [
 export default function SignalLanes() {
   return (
     <section className={styles.section} aria-labelledby="what-gets-checked">
-      <header className={styles.head}>
+      <Reveal as="header" className={styles.head}>
         <h2 id="what-gets-checked" className="eyebrow">
           What gets checked
         </h2>
         <p className="text-[11px]" style={{ color: "var(--ink-faint)" }}>
           Five dimensions · 14 deterministic signals
         </p>
-      </header>
+      </Reveal>
 
       <div className={styles.rail}>
         <div className={styles.line} aria-hidden="true" />
 
-        <ol className={styles.lanes}>
+        <Reveal as="ol" stagger step={80} delay={120} className={styles.lanes}>
           {LANES.map((lane, index) => {
             const number = String(index + 1).padStart(2, "0");
             return (
@@ -68,7 +69,7 @@ export default function SignalLanes() {
               </li>
             );
           })}
-        </ol>
+        </Reveal>
       </div>
     </section>
   );

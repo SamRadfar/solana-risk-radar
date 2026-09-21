@@ -1,0 +1,125 @@
+/**
+ * First-view reveal.
+ *
+ * Two shapes: an element that reveals itself (`.reveal`), and an element that
+ * stays put while its direct children reveal in sequence (`.staggerHost`).
+ * They are separate because combining them animates the same content twice —
+ * the group slides in, and then everything inside it slides in again.
+ *
+ * Only `opacity` and `transform` are animated, so a reveal never reads back
+ * layout and never triggers one. The hidden state is authored in CSS rather
+ * than applied by script, so it is already correct in the server-rendered HTML
+ * and there is no frame where content appears and then jumps.
+ */
+
+.reveal,
+.staggerHost {
+  --reveal-distance: 18px;
+  --reveal-delay: 0ms;
+  --reveal-step: 70ms;
+  --reveal-duration: 620ms;
+  --reveal-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal[data-reveal="out"] {
+  opacity: 0;
+  transform: translate3d(0, var(--reveal-distance), 0);
+}
+
+/*
+ * The transition lives on the revealed state only. Declared on the hidden
+ * state as well, it would also animate anything that puts an element back —
+ * and a reveal is one-way by definition.
+ */
+.reveal[data-reveal="in"] {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition:
+    opacity var(--reveal-duration) var(--reveal-ease) var(--reveal-delay),
+    transform var(--reveal-duration) var(--reveal-ease) var(--reveal-delay);
+}
+
+/* --------------------------------------------------------------------------
+   Staggered children — one observer for the group, the offsets in CSS
+-------------------------------------------------------------------------- */
+
+.staggerHost[data-reveal="out"] > * {
+  opacity: 0;
+  transform: translate3d(0, var(--reveal-distance), 0);
+}
+
+.staggerHost[data-reveal="in"] > * {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition:
+    opacity var(--reveal-duration) var(--reveal-ease),
+    transform var(--reveal-duration) var(--reveal-ease);
+}
+
+.staggerHost[data-reveal="in"] > *:nth-child(1) {
+  transition-delay: var(--reveal-delay);
+}
+.staggerHost[data-reveal="in"] > *:nth-child(2) {
+  transition-delay: calc(var(--reveal-delay) + var(--reveal-step));
+}
+.staggerHost[data-reveal="in"] > *:nth-child(3) {
+  transition-delay: calc(var(--reveal-delay) + var(--reveal-step) * 2);
+}
+.staggerHost[data-reveal="in"] > *:nth-child(4) {
+  transition-delay: calc(var(--reveal-delay) + var(--reveal-step) * 3);
+}
+.staggerHost[data-reveal="in"] > *:nth-child(5) {
+  transition-delay: calc(var(--reveal-delay) + var(--reveal-step) * 4);
+}
+.staggerHost[data-reveal="in"] > *:nth-child(6) {
+  transition-delay: calc(var(--reveal-delay) + var(--reveal-step) * 5);
+}
+.staggerHost[data-reveal="in"] > *:nth-child(7) {
+  transition-delay: calc(var(--reveal-delay) + var(--reveal-step) * 6);
+}
+
+/*
+ * Past the seventh child the delay stops growing. A long list would otherwise
+ * end with the reader waiting on an empty screen for content that is already
+ * on it — the stagger is a flourish, not a queue.
+ */
+.staggerHost[data-reveal="in"] > *:nth-child(n + 8) {
+  transition-delay: calc(var(--reveal-delay) + var(--reveal-step) * 7);
+}
+
+/* --------------------------------------------------------------------------
+   Smaller screens: less travel, tighter timing
+-------------------------------------------------------------------------- */
+
+@media (max-width: 640px) {
+  .reveal,
+  .staggerHost {
+    --reveal-distance: 10px;
+    --reveal-duration: 480ms;
+    --reveal-step: 50ms;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Escape hatches — content must never depend on motion to be readable
+-------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal[data-reveal],
+  .staggerHost[data-reveal] > * {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+    transition-delay: 0ms !important;
+  }
+}
+
+/* Without script there is nothing to flip the state, so nothing may hide. */
+@media (scripting: none) {
+  .reveal[data-reveal],
+  .staggerHost[data-reveal] > * {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}

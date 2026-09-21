@@ -5,6 +5,8 @@ import VerdictHero from "./VerdictHero";
 import SummaryRail from "./SummaryRail";
 import CategoryProfile from "./CategoryProfile";
 import DistributionPanel from "./DistributionPanel";
+import InterpretationBand from "./InterpretationBand";
+import Reveal from "./Reveal";
 import SignalCard from "./SignalCard";
 
 /**
@@ -21,6 +23,12 @@ import SignalCard from "./SignalCard";
  * section navigation — so the reader never loses the answer while reading the
  * detail. The rail is desktop-only; on narrower screens the hero already
  * contains everything it echoes.
+ *
+ * **The interpretation band** breaks the evidence layer in half. Between the
+ * flagged signals and the clean ones — the point at which the page is nothing
+ * but stacked cards — it steps out of the card rhythm to say where the risk
+ * came from. The rail is deliberately not wrapped in a reveal: an animated
+ * ancestor becomes its containing block and breaks `position: sticky`.
  */
 export default function ReportView({ report }: { report: RiskReport }) {
   const measured = report.signals.filter((s) => s.status === "ok");
@@ -32,13 +40,14 @@ export default function ReportView({ report }: { report: RiskReport }) {
 
   return (
     <div className="space-y-5">
-      <div className="rise">
+      <Reveal>
         <VerdictHero report={report} />
-      </div>
+      </Reveal>
 
       {report.warnings.length > 0 && (
-        <div
-          className="rise card p-4 text-[13px] leading-relaxed space-y-2"
+        <Reveal
+          delay={70}
+          className="card p-4 text-[13px] leading-relaxed space-y-2"
           style={{
             borderColor: "rgba(250,178,25,0.3)",
             background: "rgba(250,178,25,0.06)",
@@ -48,11 +57,11 @@ export default function ReportView({ report }: { report: RiskReport }) {
           {report.warnings.map((warning, index) => (
             <p key={index}>{warning}</p>
           ))}
-        </div>
+        </Reveal>
       )}
 
       {/* ---- Layer 2 ---- */}
-      <div className="flex items-center gap-4 pt-4">
+      <Reveal className="flex items-center gap-4 pt-4">
         <h2 className="eyebrow shrink-0">Detailed evidence</h2>
         <div
           className="h-px flex-1"
@@ -61,11 +70,19 @@ export default function ReportView({ report }: { report: RiskReport }) {
               "linear-gradient(90deg, var(--line-strong), transparent)",
           }}
         />
-      </div>
+      </Reveal>
 
       <div className="flex gap-6 items-start">
-        <main className="flex-1 min-w-0 space-y-4 stagger">
-          <CategoryProfile categories={report.categories} />
+        {/*
+          Each block below reveals on its own as the reader reaches it, which
+          is why there is no container-level stagger here: one stagger fires on
+          mount, so anything below the fold would spend its entrance off-screen
+          and be static by the time it is scrolled to.
+        */}
+        <main className="flex-1 min-w-0 space-y-4">
+          <Reveal>
+            <CategoryProfile categories={report.categories} />
+          </Reveal>
 
           {flagged.length > 0 && (
             <SignalGroup
@@ -76,6 +93,8 @@ export default function ReportView({ report }: { report: RiskReport }) {
             />
           )}
 
+          <InterpretationBand report={report} />
+
           {passed.length > 0 && (
             <SignalGroup
               id="clean"
@@ -85,7 +104,9 @@ export default function ReportView({ report }: { report: RiskReport }) {
             />
           )}
 
-          <DistributionPanel distribution={report.distribution} />
+          <Reveal>
+            <DistributionPanel distribution={report.distribution} />
+          </Reveal>
 
           {unmeasured.length > 0 && (
             <SignalGroup
@@ -118,8 +139,14 @@ function SignalGroup({
   signals: RiskSignal[];
 }) {
   return (
+    /*
+     * The section element itself is never the reveal: it carries the anchor id
+     * the rail and the header navigate to, and an element mid-transform is the
+     * wrong thing to scroll to. The heading and the card grid reveal separately
+     * inside it — title first, cards a beat later.
+     */
     <section id={id} className="anchor">
-      <div className="flex items-baseline justify-between gap-3 flex-wrap mb-3">
+      <Reveal className="flex items-baseline justify-between gap-3 flex-wrap mb-3">
         <h3 className="text-[15px] font-semibold">
           {title}
           <span className="tnum ml-2 text-xs" style={{ color: "var(--ink-faint)" }}>
@@ -129,19 +156,19 @@ function SignalGroup({
         <p className="text-xs" style={{ color: "var(--ink-muted)" }}>
           {caption}
         </p>
-      </div>
-      <div className="grid gap-3 md:grid-cols-2">
+      </Reveal>
+      <Reveal stagger step={55} delay={60} className="grid gap-3 md:grid-cols-2">
         {signals.map((signal) => (
           <SignalCard key={signal.id} signal={signal} />
         ))}
-      </div>
+      </Reveal>
     </section>
   );
 }
 
 function SourcesPanel({ report }: { report: RiskReport }) {
   return (
-    <section id="sources" className="anchor card card-lit p-5 sm:p-6">
+    <Reveal as="section" id="sources" className="anchor card card-lit p-5 sm:p-6">
       <header className="flex items-baseline justify-between gap-3 flex-wrap">
         <h3 className="text-[15px] font-semibold">Data sources</h3>
         <p className="text-xs tnum" style={{ color: "var(--ink-muted)" }}>
@@ -177,13 +204,17 @@ function SourcesPanel({ report }: { report: RiskReport }) {
         Analysed in {(report.elapsedMs / 1000).toFixed(1)}s · {report.availableWeight} of{" "}
         {report.totalWeight} signal weight measurable · {report.coveragePercent}% coverage
       </p>
-    </section>
+    </Reveal>
   );
 }
 
 function Disclaimer() {
   return (
-    <p className="card p-4 text-[13px] leading-relaxed" style={{ color: "var(--ink-secondary)" }}>
+    <Reveal
+      as="p"
+      className="card p-4 text-[13px] leading-relaxed"
+      style={{ color: "var(--ink-secondary)" }}
+    >
       <strong style={{ color: "var(--ink)" }}>Not financial advice.</strong> Risk Radar is a
       risk-signal analyser: it reports what is measurable on chain and in market data, and
       nothing else. It is not a scam detector, a safety guarantee, or a prediction of price.
@@ -192,7 +223,7 @@ function Disclaimer() {
       are invisible here include off-chain promises, team intent, and logic in other
       programs. Every figure shown is either measured or explicitly marked as not measured.
       Always do your own research.
-    </p>
+    </Reveal>
   );
 }
 
