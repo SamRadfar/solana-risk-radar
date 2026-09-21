@@ -52,10 +52,15 @@
    Plot
 -------------------------------------------------------------------------- */
 
+/*
+ * Grows to whatever height the analysis column beside it takes. The floor is
+ * what it is worth drawing at all — a token with no flagged concerns leaves a
+ * shorter column, and the chart should still read as a chart there.
+ */
 .plot {
   position: relative;
   flex: 1 1 auto;
-  min-height: 150px;
+  min-height: 220px;
 }
 
 .svg {
@@ -95,7 +100,7 @@
 
 .placeholder {
   flex: 1 1 auto;
-  min-height: 150px;
+  min-height: 220px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -146,7 +151,7 @@
 
   .plot,
   .placeholder {
-    min-height: 130px;
+    min-height: 160px;
   }
 
   .price {

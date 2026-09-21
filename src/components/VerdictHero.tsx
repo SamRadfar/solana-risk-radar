@@ -10,6 +10,7 @@ import { formatNumber, formatPrice, formatUsd, truncateAddress } from "@/lib/for
 
 import MarketContextChart from "./MarketContextChart";
 import ScoreDial from "./ScoreDial";
+import styles from "./VerdictHero.module.css";
 
 /**
  * The hero verdict — the whole answer, above the fold.
@@ -20,12 +21,17 @@ import ScoreDial from "./ScoreDial";
  * echoes a condensed version of this for scroll context; the detail below
  * carries the argument.
  *
- * The upper half is split: the verdict on the left, four hours of price
- * movement on the right. The chart is context and is labelled as such — it is
- * never an input to the score, and it sits beside the verdict rather than
- * inside it so the two are not read as one claim. Everything below the split
- * — the main concerns, the token facts, the links — stays full width, because
- * those are the verdict's own supporting detail.
+ * The card is split: the analysis on the left — verdict, explanation, signal
+ * counts and the ranked main concerns — and four hours of price movement on
+ * the right. The chart is context and is labelled as such: it is never an
+ * input to the score, and it sits beside the argument rather than inside it so
+ * the two are not read as one claim.
+ *
+ * The concerns live in the left column rather than across the full width, and
+ * that is what gives the chart its height — the grid row is as tall as the
+ * analysis beside it, so the chart stretches to match instead of sitting as a
+ * small panel next to a tall block. The token facts below stay full width,
+ * because they describe the token rather than the verdict.
  */
 export default function VerdictHero({ report }: { report: RiskReport }) {
   const { overview, summary } = report;
@@ -54,8 +60,10 @@ export default function VerdictHero({ report }: { report: RiskReport }) {
 
       <div className="relative p-6 sm:p-8">
         <div className="grid gap-7 lg:gap-8 lg:grid-cols-[60fr_40fr] items-stretch">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-7 lg:gap-8">
-          <div className="flex justify-center sm:justify-start shrink-0">
+          {/* Left: the analysis. Its height sets the row; the chart matches it. */}
+          <div className="min-w-0">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-7 lg:gap-8">
+              <div className="flex justify-center sm:justify-start shrink-0">
             <ScoreDial
               score={report.score}
               classification={report.classification}
@@ -150,65 +158,60 @@ export default function VerdictHero({ report }: { report: RiskReport }) {
                   </div>
                 );
               })}
+              </div>
             </div>
-          </div>
-          </div>
+            </div>
 
-          <MarketContextChart report={report} />
-        </div>
+            {/* ---- Main concerns, ranked ---- */}
+          <div className={styles.ledger}>
+            <div className="eyebrow">Main concerns</div>
 
-        {/* Main concerns */}
-        <div className="mt-7 pt-6" style={{ borderTop: "1px solid var(--line)" }}>
-          {summary.topConcerns.length > 0 ? (
-            <>
-              <div className="eyebrow mb-3">Main concerns</div>
-              <div className="grid gap-2.5 sm:grid-cols-3">
+            {summary.topConcerns.length > 0 ? (
+              <ol className={styles.list}>
                 {summary.topConcerns.map((concern, index) => {
                   const m = SEVERITY_META[concern.severity];
                   return (
-                    <div
-                      key={concern.id}
-                      className="inset p-3.5 relative overflow-hidden"
-                      style={{ borderColor: m.border, background: m.soft }}
-                    >
-                      <div
+                    <li key={concern.id} className={styles.row}>
+                      <span
                         aria-hidden="true"
-                        className="absolute left-0 top-0 bottom-0 w-[2px]"
+                        className={styles.tick}
                         style={{ background: m.color }}
                       />
-                      <div className="flex items-center justify-between gap-2">
+                      <span className={`tnum ${styles.rank}`}>
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+
+                      <span className={styles.body}>
+                        <span className={styles.label}>{concern.label}</span>
                         <span
-                          className="tnum text-[10px]"
-                          style={{ color: "var(--ink-faint)" }}
-                        >
-                          {String(index + 1).padStart(2, "0")}
-                        </span>
-                        <span
-                          className="text-[10px] flex items-center gap-1"
+                          className={`font-mono ${styles.value}`}
                           style={{ color: m.color }}
                         >
-                          <span aria-hidden="true">{m.glyph}</span>
-                          {m.label}
+                          {concern.observedValue}
                         </span>
-                      </div>
-                      <div className="mt-1.5 text-sm font-medium">{concern.label}</div>
-                      <div
-                        className="mt-1 font-mono text-[12px] break-words"
-                        style={{ color: m.color }}
-                      >
-                        {concern.observedValue}
-                      </div>
-                    </div>
+                      </span>
+
+                      {/* Colour, glyph and word together — severity is never hue alone. */}
+                      <span className={styles.severity} style={{ color: m.color }}>
+                        <span aria-hidden="true" className={styles.glyph}>
+                          {m.glyph}
+                        </span>
+                        {m.label}
+                      </span>
+                    </li>
                   );
                 })}
-              </div>
-            </>
-          ) : (
-            <p className="text-sm" style={{ color: "var(--ink-secondary)" }}>
-              No signal was flagged at any severity. This is not a safety guarantee — it
-              means every check that could be measured came back clean.
-            </p>
-          )}
+              </ol>
+            ) : (
+              <p className={styles.clean}>
+                No signal was flagged at any severity. This is not a safety guarantee — it
+                means every check that could be measured came back clean.
+              </p>
+            )}
+            </div>
+          </div>
+
+          <MarketContextChart report={report} />
         </div>
 
         {/* Token facts */}
