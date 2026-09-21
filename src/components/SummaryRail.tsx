@@ -27,8 +27,11 @@ import styles from "./SummaryRail.module.css";
  * desktop affordance — on a narrow screen the report is a single column and
  * scrolling is the navigation.
  *
- * The rail can outgrow the viewport once the snapshot is in it, so it scrolls
- * internally rather than letting its lower half become unreachable.
+ * The rail owns no scrolling of its own. It is as tall as its contents and
+ * pins only on viewports tall enough to show all of it, so there is never a
+ * second scrollbar competing with the page's, and no part of it can end up
+ * parked out of reach inside a clipped box. The run timing that used to sit
+ * beneath it is already stated by the provenance strip on the page.
  */
 export default function SummaryRail({ report }: { report: RiskReport }) {
   const sections = buildSections(report);
@@ -39,7 +42,7 @@ export default function SummaryRail({ report }: { report: RiskReport }) {
       {/* Desktop: the persistent rail. */}
       <aside
         className={`hidden xl:block ${styles.rail}`}
-        style={{ top: "calc(var(--header-h) + 20px)" }}
+        style={{ top: "calc(var(--header-h) + 12px)" }}
         aria-label="Report summary"
       >
         <div className={`card card-lit ${styles.panel}`}>
@@ -70,11 +73,6 @@ export default function SummaryRail({ report }: { report: RiskReport }) {
             </ul>
           </nav>
         </div>
-
-        <p className={`tnum ${styles.footnote}`}>
-          Analysed in {(report.elapsedMs / 1000).toFixed(1)}s · {report.availableWeight}/
-          {report.totalWeight} signal weight measurable
-        </p>
       </aside>
 
       {/* Narrow screens: the same panel, inline and full width. */}

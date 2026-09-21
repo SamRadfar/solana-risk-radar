@@ -10,14 +10,14 @@
 .identity {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 16px 18px 12px;
+  gap: 10px;
+  padding: 12px 16px 8px;
   min-width: 0;
 }
 
 .logo {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   border-radius: 999px;
   object-fit: cover;
   flex-shrink: 0;
@@ -65,7 +65,7 @@
 -------------------------------------------------------------------------- */
 
 .addressRow {
-  padding: 0 18px 14px;
+  padding: 0 16px 11px;
 }
 
 .copy {
@@ -74,7 +74,7 @@
   justify-content: space-between;
   gap: 8px;
   width: 100%;
-  padding: 7px 10px;
+  padding: 6px 9px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
   background: var(--surface-inset);
@@ -111,8 +111,8 @@
 .risk {
   display: flex;
   align-items: center;
-  gap: 15px;
-  padding: 14px 18px 16px;
+  gap: 13px;
+  padding: 10px 16px 12px;
   border-top: 1px solid var(--line);
 }
 
@@ -137,7 +137,7 @@
 -------------------------------------------------------------------------- */
 
 .block {
-  padding: 14px 18px 16px;
+  padding: 10px 16px 12px;
   border-top: 1px solid var(--line);
 }
 
@@ -146,7 +146,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: 9px;
 }
 
 .note {
@@ -161,15 +161,11 @@
 .pairs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 13px 16px;
+  gap: 7px 16px;
 }
 
 .cell {
   min-width: 0;
-}
-
-.cellWide {
-  grid-column: 1 / -1;
 }
 
 .cellLabel {
@@ -180,8 +176,8 @@
 }
 
 .cellValue {
-  margin-top: 4px;
-  font-size: 14.5px;
+  margin-top: 2px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.015em;
   color: var(--ink);
@@ -200,10 +196,16 @@
    Findings
 -------------------------------------------------------------------------- */
 
+/*
+ * Two columns, not three. Three fits the rail's height budget but not its
+ * width: at 332px a third column truncates "Not measured" to "Not meas…",
+ * and a severity label that cannot be read in full is worse than a slightly
+ * taller panel.
+ */
 .findings {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 16px;
+  gap: 7px 14px;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -231,6 +233,7 @@
 }
 
 .findingLabel {
+  font-size: 11px;
   color: var(--ink-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -243,7 +246,7 @@
 
 .links {
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 
 .linkRow {
@@ -299,9 +302,42 @@
   flex-shrink: 0;
 }
 
+/*
+ * Social marks. The row stays a row of links rather than becoming a strip of
+ * buttons: no fill, no border, just the mark, with the hit area coming from
+ * padding so the target is comfortable without drawing a box around it.
+ */
+.socialRow {
+  gap: 2px;
+  /* Pulls the padded targets back into line with the other rows' text. */
+  margin: -5px -6px;
+}
+
+.social {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Padding, not a border, is what makes the target comfortable to hit. */
+  padding: 5px 6px;
+  border-radius: 7px;
+  color: var(--ink-muted);
+  transition:
+    color 0.18s ease,
+    background 0.18s ease;
+}
+
+.social:hover {
+  color: var(--accent);
+  background: rgba(56, 214, 236, 0.08);
+}
+
+.social:focus-visible {
+  color: var(--accent);
+}
+
 .provenance {
-  margin-top: 12px;
-  padding-top: 10px;
+  margin-top: 9px;
+  padding-top: 8px;
   border-top: 1px solid var(--line);
   font-size: 10.5px;
   line-height: 1.5;
@@ -324,7 +360,7 @@
   gap: 5px;
   flex: 1 1 0;
   min-width: 0;
-  padding: 7px 9px;
+  padding: 6px 9px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
   background: var(--surface-inset);
@@ -372,13 +408,14 @@
     padding-right: 16px;
   }
 
+  /* Full page width: the findings fit on one line. */
+  .findings {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
   /* With the full page width available, the metric grid can breathe. */
   .pairs {
     grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .cellWide {
-    grid-column: auto;
   }
 
   .findings {
@@ -400,13 +437,14 @@
   }
 
   .findings {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .copy,
   .external,
+  .social,
   .field {
     transition: none;
   }

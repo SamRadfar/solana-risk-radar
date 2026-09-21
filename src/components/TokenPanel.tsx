@@ -93,7 +93,7 @@ export default function TokenPanel({ report }: { report: RiskReport }) {
         <ScoreDial
           score={report.score}
           classification={report.classification}
-          size={96}
+          size={78}
           compact
         />
         <div className={styles.riskText}>
@@ -101,10 +101,7 @@ export default function TokenPanel({ report }: { report: RiskReport }) {
             {CLASSIFICATION_SHORT[report.classification]} risk
           </div>
           <div className={styles.riskMeta}>
-            {report.coveragePercent}% coverage
-          </div>
-          <div className={styles.riskMeta}>
-            {totalSignals} signals checked
+            {report.coveragePercent}% coverage · {totalSignals} signals
           </div>
         </div>
       </div>
@@ -113,11 +110,6 @@ export default function TokenPanel({ report }: { report: RiskReport }) {
       <section className={styles.block} aria-label="Market snapshot">
         <div className={styles.eyebrowRow}>
           <span className="eyebrow">Market</span>
-          {market.available && market.poolCount > 0 && (
-            <span className={`tnum ${styles.note}`}>
-              {market.poolCount} pool{market.poolCount === 1 ? "" : "s"}
-            </span>
-          )}
         </div>
 
         <dl className={styles.pairs}>
@@ -149,8 +141,8 @@ export default function TokenPanel({ report }: { report: RiskReport }) {
                 ? `${formatNumber(overview.supplyUi)}${symbol ? ` ${symbol}` : ""}`
                 : "0 (reported)"
             }
-            wide
           />
+          <Cell label="Pools" value={market.available ? String(market.poolCount) : null} />
         </dl>
       </section>
 
@@ -213,9 +205,9 @@ export default function TokenPanel({ report }: { report: RiskReport }) {
           {socials.length > 0 && (
             <div className={styles.linkRow}>
               <dt className={styles.linkLabel}>Socials</dt>
-              <dd className={styles.linkValue}>
+              <dd className={styles.linkValue + " " + styles.socialRow}>
                 {socials.map((url) => (
-                  <ExternalLink key={url} href={url} label={socialLabel(url)} />
+                  <SocialLink key={url} href={url} />
                 ))}
               </dd>
             </div>
@@ -253,7 +245,7 @@ export default function TokenPanel({ report }: { report: RiskReport }) {
         */}
         {(websites.length > 0 || socials.length > 0) && (
           <p className={styles.provenance}>
-            Links come from pool listing metadata and are not issuer-verified.
+            Links come from pool listing metadata, not issuer-verified.
           </p>
         )}
       </section>
@@ -272,17 +264,9 @@ const METADATA_SOURCE: Record<string, string> = {
   none: "No metadata account",
 };
 
-function Cell({
-  label,
-  value,
-  wide,
-}: {
-  label: string;
-  value: string | null;
-  wide?: boolean;
-}) {
+function Cell({ label, value }: { label: string; value: string | null }) {
   return (
-    <div className={`${styles.cell} ${wide ? styles.cellWide : ""}`}>
+    <div className={styles.cell}>
       <dt className={styles.cellLabel}>{label}</dt>
       <dd className={`tnum ${styles.cellValue}`}>
         {value ?? <span className={styles.unavailable}>Unavailable</span>}
@@ -432,29 +416,96 @@ function hostOf(url: string): string {
 }
 
 /**
- * Names a social link from its own hostname.
+ * A social link, shown as its platform's mark.
  *
- * This reads the URL the metadata pipeline returned — it never infers a
- * handle, constructs a profile URL, or assumes a project has an account
- * anywhere. An unrecognised host is shown as the host itself.
+ * The platform is identified from the URL's own hostname — nothing is inferred
+ * from the token's name and no profile URL is ever constructed. A host with no
+ * mark of its own keeps its hostname as the label and gets a plain link icon,
+ * so an unrecognised platform is still honestly identified rather than dropped
+ * or mislabelled as something it is not.
+ *
+ * Marks are inline paths, which is how every other icon in this project is
+ * drawn: no icon dependency, no downloaded asset.
  */
-function socialLabel(url: string): string {
+function SocialLink({ href }: { href: string }) {
+  const platform = platformFor(href);
+
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer nofollow"
+      className={styles.social}
+      aria-label={platform.name}
+      title={platform.name}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width="15"
+        height="15"
+        aria-hidden="true"
+        focusable="false"
+        {...(platform.stroke
+          ? {
+              fill: "none",
+              stroke: "currentColor",
+              strokeWidth: 2,
+              strokeLinecap: "round" as const,
+              strokeLinejoin: "round" as const,
+            }
+          : { fill: "currentColor" })}
+      >
+        <path d={platform.path} />
+      </svg>
+    </a>
+  );
+}
+
+interface Platform {
+  name: string;
+  path: string;
+  /** Drawn rather than filled. */
+  stroke?: boolean;
+}
+
+const X_MARK =
+  "M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z";
+
+const TELEGRAM_MARK =
+  "M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z";
+
+const DISCORD_MARK =
+  "M20.317 4.369a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.009c.12.099.246.198.373.292a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.331c-1.183 0-2.157-1.086-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.332-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.086-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.332-.946 2.418-2.157 2.418z";
+
+const GITHUB_MARK =
+  "M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12";
+
+const YOUTUBE_MARK =
+  "M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z";
+
+const LINK_MARK =
+  "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71";
+
+function platformFor(url: string): Platform {
   let host: string;
   try {
     host = new URL(url).hostname.replace(/^www\./, "").toLowerCase();
   } catch {
-    return url;
+    return { name: "Link", path: LINK_MARK, stroke: true };
   }
 
-  if (host === "x.com" || host === "twitter.com") return "X";
-  if (host === "t.me" || host.endsWith("telegram.org")) return "Telegram";
-  if (host.endsWith("discord.gg") || host.endsWith("discord.com")) return "Discord";
-  if (host.endsWith("github.com")) return "GitHub";
-  if (host.endsWith("reddit.com")) return "Reddit";
-  if (host.endsWith("youtube.com") || host === "youtu.be") return "YouTube";
-  if (host.endsWith("instagram.com")) return "Instagram";
-  if (host.endsWith("tiktok.com")) return "TikTok";
-  if (host.endsWith("medium.com")) return "Medium";
-  if (host.endsWith("linkedin.com")) return "LinkedIn";
-  return host;
+  if (host === "x.com" || host === "twitter.com") return { name: "X", path: X_MARK };
+  if (host === "t.me" || host.endsWith("telegram.org")) {
+    return { name: "Telegram", path: TELEGRAM_MARK };
+  }
+  if (host.endsWith("discord.gg") || host.endsWith("discord.com")) {
+    return { name: "Discord", path: DISCORD_MARK };
+  }
+  if (host.endsWith("github.com")) return { name: "GitHub", path: GITHUB_MARK };
+  if (host.endsWith("youtube.com") || host === "youtu.be") {
+    return { name: "YouTube", path: YOUTUBE_MARK };
+  }
+
+  // Unrecognised: the host is still the honest name for it.
+  return { name: host, path: LINK_MARK, stroke: true };
 }

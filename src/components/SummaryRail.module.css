@@ -9,22 +9,43 @@
  * shell and the section navigation.
  */
 
+/*
+ * The rail has exactly one scrolling behaviour, and it is the page's.
+ *
+ * An earlier version capped the rail's height and gave it `overflow-y: auto`,
+ * which produced a second scrollbar inside the first: the snapshot could be
+ * clipped at the top, the navigation could sit below the rail's own scroll
+ * position, and the rail appeared to move independently of the page. There is
+ * no overflow container here now, and no height cap — the rail is simply as
+ * tall as its contents.
+ *
+ * Stickiness is then conditional on it actually fitting. A sticky element
+ * taller than its viewport slot never scrolls, so its lower part would be
+ * permanently unreachable; below the threshold the rail is static and scrolls
+ * with the page, which keeps every part of it reachable and keeps the page as
+ * the only thing that scrolls.
+ */
 .rail {
   width: 332px;
   flex-shrink: 0;
   align-self: flex-start;
-  position: sticky;
-  /*
-   * With the token snapshot in it the rail can be taller than the viewport, so
-   * it scrolls inside itself. Without this the lower half — including the
-   * section navigation — becomes permanently unreachable on a short screen,
-   * because a sticky element never scrolls past its own top.
-   */
-  max-height: calc(100dvh - var(--header-h) - 40px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  /* Room for the footnote below the panel, and for the scrollbar beside it. */
-  padding-right: 2px;
+}
+
+/*
+ * The threshold is measured, not guessed: the rail is ~1040px tall with a
+ * fully populated token, and it pins 80px below the top, so it needs about
+ * 1130px of viewport to show all of itself at once. Above that it pins; below
+ * it, it scrolls with the page like any other column.
+ *
+ * Compacting alone cannot close that gap. A 1080p window has roughly 950px of
+ * usable height once browser chrome is subtracted, and reaching it would mean
+ * shrinking type past the point of comfortable reading — so the rail scrolls
+ * there rather than being pinned with its navigation hanging below the fold.
+ */
+@media (min-height: 1130px) {
+  .rail {
+    position: sticky;
+  }
 }
 
 .panel {
@@ -36,7 +57,7 @@
 -------------------------------------------------------------------------- */
 
 .nav {
-  padding: 10px;
+  padding: 7px;
   border-top: 1px solid var(--line);
 }
 
@@ -51,9 +72,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 7px 10px;
-  border-radius: 9px;
-  font-size: 12.5px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
   color: var(--ink-muted);
   transition:
     color 0.18s ease,
@@ -79,7 +100,7 @@
 
 .navTick {
   width: 2px;
-  height: 13px;
+  height: 12px;
   border-radius: 999px;
   background: var(--line-strong);
   flex-shrink: 0;
@@ -100,14 +121,6 @@
   font-size: 10.5px;
   color: var(--ink-faint);
   flex-shrink: 0;
-}
-
-.footnote {
-  margin-top: 10px;
-  padding: 0 4px 4px;
-  font-size: 10.5px;
-  line-height: 1.55;
-  color: var(--ink-faint);
 }
 
 /* --------------------------------------------------------------------------
