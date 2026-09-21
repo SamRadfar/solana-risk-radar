@@ -88,21 +88,32 @@ export default function TokenPanel({ report }: { report: RiskReport }) {
         <CopyAddress mint={overview.mint} />
       </div>
 
-      {/* ---- Risk summary ---- */}
-      <div className={styles.risk}>
+      {/*
+        ---- Risk summary ----
+
+        The verdict reads as one centred module rather than a dial with text
+        beside it: the number is the focal point, the gauge is its instrument,
+        and the label and metadata sit beneath in descending weight. The full
+        dial is used rather than the compact one — at this size its ticks and
+        "/ 100" are what make the figure read as a measurement against a scale
+        instead of a bare number.
+      */}
+      <div className={styles.verdict}>
         <ScoreDial
           score={report.score}
           classification={report.classification}
-          size={78}
-          compact
+          /*
+           * Large enough that the dial's own fixed-size labels ("/ 100" and
+           * the eyebrow) clear the arc's lower curve — they are absolute
+           * sizes, so the smaller the dial, the more of the ring they sit on.
+           */
+          size={176}
         />
-        <div className={styles.riskText}>
-          <div className={styles.classification} style={{ color: meta.color }}>
-            {CLASSIFICATION_SHORT[report.classification]} risk
-          </div>
-          <div className={styles.riskMeta}>
-            {report.coveragePercent}% coverage · {totalSignals} signals
-          </div>
+        <div className={styles.classification} style={{ color: meta.color }}>
+          {CLASSIFICATION_SHORT[report.classification]} risk
+        </div>
+        <div className={styles.riskMeta}>
+          {report.coveragePercent}% coverage · {totalSignals} signals
         </div>
       </div>
 

@@ -68,10 +68,11 @@ export default function ReportView({ report }: { report: RiskReport }) {
 
       {/*
         Column below xl, where the rail has nowhere to sit and renders as an
-        inline summary instead; the row layout and the sticky rail return at
-        xl exactly as before.
+        inline summary instead. The items are left to stretch: the rail has to
+        match the evidence column's height, because that is the box its sticky
+        navigation travels inside.
       */}
-      <div className="flex flex-col xl:flex-row gap-6 xl:items-start">
+      <div className="flex flex-col xl:flex-row gap-6">
         <main className={`flex-1 min-w-0 ${styles.sections}`}>
           <CategoryProfile categories={report.categories} />
 

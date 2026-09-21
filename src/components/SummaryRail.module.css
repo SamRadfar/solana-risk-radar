@@ -10,55 +10,63 @@
  */
 
 /*
- * The rail has exactly one scrolling behaviour, and it is the page's.
+ * The rail is a column beside the report, not a scroll container.
  *
- * An earlier version capped the rail's height and gave it `overflow-y: auto`,
- * which produced a second scrollbar inside the first: the snapshot could be
- * clipped at the top, the navigation could sit below the rail's own scroll
- * position, and the rail appeared to move independently of the page. There is
- * no overflow container here now, and no height cap — the rail is simply as
- * tall as its contents.
- *
- * Stickiness is then conditional on it actually fitting. A sticky element
- * taller than its viewport slot never scrolls, so its lower part would be
- * permanently unreachable; below the threshold the rail is static and scrolls
- * with the page, which keeps every part of it reachable and keeps the page as
- * the only thing that scrolls.
+ * It stretches to the height of the evidence column so that the sticky
+ * navigation inside it has somewhere to travel: a sticky element stops at the
+ * bottom of its containing block, and a rail only as tall as its own contents
+ * would release the navigation almost immediately.
+ */
+/*
+ * Visibility is owned here rather than by a utility class. The rail needs
+ * `display: flex` to lay its two blocks out, and a module rule setting display
+ * overrides Tailwind's `hidden` — which showed the rail and the inline
+ * snapshot at the same time on narrow screens. Declaring both states in one
+ * place removes the conflict.
  */
 .rail {
-  width: 332px;
-  flex-shrink: 0;
-  align-self: flex-start;
+  display: none;
 }
 
-/*
- * The threshold is measured, not guessed: the rail is ~1040px tall with a
- * fully populated token, and it pins 80px below the top, so it needs about
- * 1130px of viewport to show all of itself at once. Above that it pins; below
- * it, it scrolls with the page like any other column.
- *
- * Compacting alone cannot close that gap. A 1080p window has roughly 950px of
- * usable height once browser chrome is subtracted, and reaching it would mean
- * shrinking type past the point of comfortable reading — so the rail scrolls
- * there rather than being pinned with its navigation hanging below the fold.
- */
-@media (min-height: 1130px) {
+@media (min-width: 1280px) {
   .rail {
-    position: sticky;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 332px;
+    flex-shrink: 0;
   }
 }
 
+/* The snapshot: normal flow, scrolls away, never pinned. */
 .panel {
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 /* --------------------------------------------------------------------------
    Navigation
 -------------------------------------------------------------------------- */
 
+/*
+ * The navigation: the rail's persistent element once the snapshot has gone.
+ *
+ * It carries its own surface at all times rather than gaining one on the way
+ * past, because a background that appears mid-scroll is exactly the kind of
+ * visible state change this handoff should not have. `align-self: start`
+ * keeps it its own height inside the stretched rail, which is what lets it
+ * stick rather than filling the column.
+ */
 .nav {
+  position: sticky;
+  top: calc(var(--header-h) + 12px);
+  align-self: flex-start;
+  width: 100%;
   padding: 7px;
-  border-top: 1px solid var(--line);
+  /* Prefixed first, standard last: the minifier keeps whichever is declared
+     last, and this browser reports the prefixed property as unsupported. */
+  -webkit-backdrop-filter: blur(14px) saturate(130%);
+  backdrop-filter: blur(14px) saturate(130%);
 }
 
 .navList {

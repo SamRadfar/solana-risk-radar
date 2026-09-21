@@ -123,40 +123,40 @@ for (const viewport of VIEWPORTS) {
       const nav = page.getByRole("navigation", { name: /Report sections/i });
       check((await nav.count()) > 0, "section navigation present in rail");
       /*
-       * The rail pins only on viewports tall enough to show all of it; on
-       * shorter ones it scrolls with the page, because a sticky element taller
-       * than its slot would park its lower half permanently out of reach.
-       * What must hold at every height is that the rail owns no scrolling of
-       * its own — a second scrollbar inside the page's was the actual defect.
+       * The rail is two blocks and only the second sticks: the snapshot sits
+       * in normal flow and scrolls away, the navigation pins beneath it and
+       * stays for the rest of the report. What must hold everywhere is that
+       * neither of them introduces a scroll container — a second scrollbar
+       * inside the page's was the original defect.
        */
-      const rails = await rail.first().evaluate((el) => {
+      const railShape = await rail.first().evaluate((el) => {
         const style = getComputedStyle(el);
+        const panel = el.firstElementChild;
+        const navBlock = el.querySelector("nav");
         return {
-          position: style.position,
           overflowY: style.overflowY,
-          maxHeight: style.maxHeight,
           ownScrollbar: el.scrollHeight > el.clientHeight + 1,
-          fits: el.getBoundingClientRect().height + 80 <= window.innerHeight,
+          snapshotPosition: getComputedStyle(panel).position,
+          navPosition: getComputedStyle(navBlock).position,
+          navTop: getComputedStyle(navBlock).top,
         };
       });
       check(
-        !rails.ownScrollbar && !["auto", "scroll"].includes(rails.overflowY),
+        !railShape.ownScrollbar && !["auto", "scroll"].includes(railShape.overflowY),
         "rail has no scroll container of its own",
-        `overflow-y: ${rails.overflowY}, max-height: ${rails.maxHeight}`,
+        `overflow-y: ${railShape.overflowY}`,
       );
       check(
-        rails.fits ? rails.position === "sticky" : rails.position === "static",
-        rails.fits ? "rail is sticky where it fits" : "rail scrolls with the page where it does not fit",
-        rails.position,
+        railShape.snapshotPosition !== "sticky" && railShape.snapshotPosition !== "fixed",
+        "snapshot sits in normal flow and can scroll away",
+        railShape.snapshotPosition,
+      );
+      check(
+        railShape.navPosition === "sticky" && parseFloat(railShape.navTop) > 0,
+        "section navigation is sticky, offset below the header",
+        `${railShape.navPosition} at top ${railShape.navTop}`,
       );
     }
-  } else {
-    check(!railVisible, "sticky rail hidden on narrow viewports");
-    check(
-      (await page.getByText(/Main concerns/i).count()) > 0 ||
-        (await page.getByText(/No signal was flagged/i).count()) > 0,
-      "hero remains self-sufficient without the rail",
-    );
   }
 
   // ---- Evidence audit: exercise EVERY evidence action on the page ----

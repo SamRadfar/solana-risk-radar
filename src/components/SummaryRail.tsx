@@ -27,11 +27,23 @@ import styles from "./SummaryRail.module.css";
  * desktop affordance — on a narrow screen the report is a single column and
  * scrolling is the navigation.
  *
- * The rail owns no scrolling of its own. It is as tall as its contents and
- * pins only on viewports tall enough to show all of it, so there is never a
- * second scrollbar competing with the page's, and no part of it can end up
- * parked out of reach inside a clipped box. The run timing that used to sit
- * beneath it is already stated by the provenance strip on the page.
+ * The rail is two blocks, and only the second one sticks.
+ *
+ * The snapshot sits in normal document flow and scrolls away with the page:
+ * once a reader is deep in the evidence, the token's market figures are
+ * context they have already taken in. The navigation beneath it is sticky, so
+ * it takes over as the rail's persistent element and stays available for the
+ * whole report. The handoff is the page scrolling, not a state change, so
+ * nothing jumps.
+ *
+ * This replaces pinning the whole rail, which only worked on viewports tall
+ * enough to hold all of it and otherwise left the navigation below the fold.
+ * There is still no scroll container anywhere in here: the page remains the
+ * only thing that scrolls.
+ *
+ * The navigation is deliberately outside the snapshot's card. `overflow:
+ * hidden` on an ancestor makes it that element's scroll container, and a
+ * sticky element inside one that never scrolls simply never sticks.
  */
 export default function SummaryRail({ report }: { report: RiskReport }) {
   const sections = buildSections(report);
@@ -40,39 +52,35 @@ export default function SummaryRail({ report }: { report: RiskReport }) {
   return (
     <>
       {/* Desktop: the persistent rail. */}
-      <aside
-        className={`hidden xl:block ${styles.rail}`}
-        style={{ top: "calc(var(--header-h) + 12px)" }}
-        aria-label="Report summary"
-      >
+      <aside className={styles.rail} aria-label="Report summary">
         <div className={`card card-lit ${styles.panel}`}>
           <TokenPanel report={report} />
-
-          <nav className={styles.nav} aria-label="Report sections">
-            <ul className={styles.navList}>
-              {sections.map((section) => {
-                const isActive = active === section.id;
-                return (
-                  <li key={section.id}>
-                    <a
-                      href={`#${section.id}`}
-                      aria-current={isActive ? "true" : undefined}
-                      className={styles.navLink}
-                    >
-                      <span className={styles.navInner}>
-                        <span aria-hidden="true" className={styles.navTick} />
-                        <span className={styles.navLabel}>{section.label}</span>
-                      </span>
-                      {section.count !== undefined && (
-                        <span className={`tnum ${styles.navCount}`}>{section.count}</span>
-                      )}
-                    </a>
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
         </div>
+
+        <nav className={`card ${styles.nav}`} aria-label="Report sections">
+          <ul className={styles.navList}>
+            {sections.map((section) => {
+              const isActive = active === section.id;
+              return (
+                <li key={section.id}>
+                  <a
+                    href={`#${section.id}`}
+                    aria-current={isActive ? "true" : undefined}
+                    className={styles.navLink}
+                  >
+                    <span className={styles.navInner}>
+                      <span aria-hidden="true" className={styles.navTick} />
+                      <span className={styles.navLabel}>{section.label}</span>
+                    </span>
+                    {section.count !== undefined && (
+                      <span className={`tnum ${styles.navCount}`}>{section.count}</span>
+                    )}
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
       </aside>
 
       {/* Narrow screens: the same panel, inline and full width. */}
