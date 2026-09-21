@@ -1,0 +1,413 @@
+/**
+ * The token snapshot panel.
+ *
+ * One surface, divided by hairlines. Numbers carry the hierarchy — labels are
+ * small, quiet and uppercase; values are tabular and set large enough to scan
+ * a column of them without reading. There are no nested cards, no pills and
+ * no borders inside the panel other than the dividers between its parts.
+ */
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 16px 18px 12px;
+  min-width: 0;
+}
+
+.logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  background: var(--surface-inset);
+}
+
+.identityText {
+  min-width: 0;
+}
+
+.name {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.symbolRow {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  margin-top: 3px;
+  min-width: 0;
+}
+
+.symbol {
+  font-size: 11.5px;
+  color: var(--ink-secondary);
+}
+
+.program {
+  font-size: 10.5px;
+  color: var(--ink-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Mint address
+-------------------------------------------------------------------------- */
+
+.addressRow {
+  padding: 0 18px 14px;
+}
+
+.copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-inset);
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.copy:hover {
+  border-color: var(--line-accent);
+}
+
+.copyAddress {
+  font-size: 11px;
+  color: var(--ink-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copyAction {
+  font-size: 10.5px;
+  color: var(--accent);
+  flex-shrink: 0;
+  min-width: 42px;
+  text-align: right;
+}
+
+/* --------------------------------------------------------------------------
+   Risk summary
+-------------------------------------------------------------------------- */
+
+.risk {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 14px 18px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.riskText {
+  min-width: 0;
+}
+
+.classification {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.riskMeta {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Blocks
+-------------------------------------------------------------------------- */
+
+.block {
+  padding: 14px 18px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.eyebrowRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.note {
+  font-size: 10.5px;
+  color: var(--ink-faint);
+}
+
+/* --------------------------------------------------------------------------
+   Market pairs
+-------------------------------------------------------------------------- */
+
+.pairs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px 16px;
+}
+
+.cell {
+  min-width: 0;
+}
+
+.cellWide {
+  grid-column: 1 / -1;
+}
+
+.cellLabel {
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.cellValue {
+  margin-top: 4px;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unavailable {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-faint);
+}
+
+/* --------------------------------------------------------------------------
+   Findings
+-------------------------------------------------------------------------- */
+
+.findings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.finding {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 11.5px;
+  min-width: 0;
+}
+
+.findingGlyph {
+  font-size: 8px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.findingCount {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  min-width: 12px;
+}
+
+.findingLabel {
+  color: var(--ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Essentials
+-------------------------------------------------------------------------- */
+
+.links {
+  display: grid;
+  gap: 10px;
+}
+
+.linkRow {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.linkLabel {
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+.linkValue {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  min-width: 0;
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.plain {
+  color: var(--ink-secondary);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+
+.external {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--ink-secondary);
+  transition: color 0.18s ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.external:hover {
+  color: var(--accent);
+}
+
+.arrow {
+  font-size: 9px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.provenance {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+/* --------------------------------------------------------------------------
+   Converter
+-------------------------------------------------------------------------- */
+
+.converter {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.field {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-inset);
+  transition: border-color 0.18s ease;
+}
+
+.field:focus-within {
+  border-color: var(--line-accent);
+}
+
+.input {
+  min-width: 0;
+  flex: 1 1 auto;
+  width: 100%;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+
+.prefix,
+.unit {
+  font-size: 10.5px;
+  color: var(--ink-faint);
+  flex-shrink: 0;
+}
+
+.equals {
+  font-size: 12px;
+  color: var(--ink-faint);
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive — the panel is also the mobile token summary
+-------------------------------------------------------------------------- */
+
+@media (max-width: 1279px) {
+  .identity,
+  .addressRow,
+  .risk,
+  .block {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  /* With the full page width available, the metric grid can breathe. */
+  .pairs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .cellWide {
+    grid-column: auto;
+  }
+
+  .findings {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .linkRow {
+    grid-template-columns: 82px minmax(0, 1fr);
+  }
+
+  .converter {
+    max-width: 420px;
+  }
+}
+
+@media (max-width: 720px) {
+  .pairs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .findings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .copy,
+  .external,
+  .field {
+    transition: none;
+  }
+}

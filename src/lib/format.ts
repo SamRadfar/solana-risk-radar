@@ -1,11 +1,19 @@
 export function formatUsd(value: number): string {
+  if (value >= 1e15) return `$${(value / 1e15).toFixed(2)}Q`;
+  if (value >= 1e12) return `$${(value / 1e12).toFixed(2)}T`;
   if (value >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(2)}B`;
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
   if (value >= 1_000) return `$${(value / 1_000).toFixed(2)}K`;
   return `$${value.toFixed(2)}`;
 }
 
+/*
+ * Tiers run past billions because token supplies routinely do: without them a
+ * high-supply memecoin reads as "87994.40B" instead of "88.00T".
+ */
 export function formatNumber(value: number): string {
+  if (value >= 1e15) return `${(value / 1e15).toFixed(2)}Q`;
+  if (value >= 1e12) return `${(value / 1e12).toFixed(2)}T`;
   if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(2)}K`;

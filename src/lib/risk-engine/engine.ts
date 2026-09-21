@@ -1,3 +1,10 @@
+import {
+  fullyDilutedValuation,
+  priceChange24h,
+  totalLiquidity,
+  totalVolume24h,
+} from "../providers/dexscreener";
+
 import type { AnalysisInput, RiskRule } from "./input";
 import {
   RISK_CATEGORIES,
@@ -402,6 +409,22 @@ export function buildRiskReport(
     totalWeight: Math.round(totalWeight),
     coveragePercent: Math.round(coverage * 100),
     sources,
+    /*
+     * Display-only passthrough. Every value here is either taken straight from
+     * the overview the caller already built, or read with the market
+     * provider's own aggregate helpers — the same ones the rules use. Nothing
+     * is recomputed here, and nothing here is an input to the score.
+     */
+    market: {
+      available: input.marketData.available,
+      priceUsd: overview.priceUsd,
+      priceChange24hPercent: priceChange24h(input.marketData),
+      marketCapUsd: overview.marketCapUsd,
+      fullyDilutedUsd: fullyDilutedValuation(input.marketData),
+      liquidityUsd: input.marketData.available ? totalLiquidity(input.marketData) : null,
+      volume24hUsd: input.marketData.available ? totalVolume24h(input.marketData) : null,
+      poolCount: input.marketData.pairs.length,
+    },
     generatedAt: new Date().toISOString(),
     elapsedMs,
     warnings,

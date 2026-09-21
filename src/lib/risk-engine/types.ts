@@ -145,6 +145,30 @@ export interface Distribution {
   reason?: string;
 }
 
+/**
+ * Market figures for display, carried alongside the report.
+ *
+ * Every field is produced by the existing aggregate helpers in the market
+ * provider — nothing here is recomputed, re-derived or independently sourced.
+ * It exists so the UI can show what the engine already measured without
+ * scraping it back out of signal text.
+ *
+ * `priceUsd` and `marketCapUsd` are deliberately the same canonical values as
+ * the ones on `TokenOverview`, so a price shown in two places can never
+ * disagree with itself.
+ */
+export interface MarketSnapshot {
+  /** False when the market provider returned nothing for this mint. */
+  available: boolean;
+  priceUsd: number | null;
+  priceChange24hPercent: number | null;
+  marketCapUsd: number | null;
+  fullyDilutedUsd: number | null;
+  liquidityUsd: number | null;
+  volume24hUsd: number | null;
+  poolCount: number;
+}
+
 export interface DataSourceStatus {
   name: string;
   detail: string;
@@ -165,6 +189,8 @@ export interface RiskReport {
   /** Percentage of total rule weight that could actually be evaluated. */
   coveragePercent: number;
   sources: DataSourceStatus[];
+  /** Market figures for display. Never an input to the score. */
+  market: MarketSnapshot;
   generatedAt: string;
   elapsedMs: number;
   warnings: string[];

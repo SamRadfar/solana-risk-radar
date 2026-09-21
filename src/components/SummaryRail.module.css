@@ -4,7 +4,9 @@
  * It used to be four separate cards floating one above another, which repeated
  * the page's own problem in miniature. Now there is a single surface, and its
  * parts are separated by padding and hairlines — the way panels on an
- * instrument are divided, rather than by giving each its own housing.
+ * instrument are divided, rather than by giving each its own housing. The
+ * snapshot's own styles live with `TokenPanel`; what remains here is the rail
+ * shell and the section navigation.
  */
 
 .rail {
@@ -12,178 +14,21 @@
   flex-shrink: 0;
   align-self: flex-start;
   position: sticky;
+  /*
+   * With the token snapshot in it the rail can be taller than the viewport, so
+   * it scrolls inside itself. Without this the lower half — including the
+   * section navigation — becomes permanently unreachable on a short screen,
+   * because a sticky element never scrolls past its own top.
+   */
+  max-height: calc(100dvh - var(--header-h) - 40px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Room for the footnote below the panel, and for the scrollbar beside it. */
+  padding-right: 2px;
 }
 
 .panel {
   overflow: hidden;
-}
-
-.block {
-  padding: 16px 18px;
-}
-
-.block + .block {
-  border-top: 1px solid var(--line);
-}
-
-.verdict {
-  padding: 18px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.identity {
-  min-width: 0;
-}
-
-.nameRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.avatar {
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  object-fit: cover;
-  flex-shrink: 0;
-  border: 1px solid var(--line);
-}
-
-.name {
-  font-size: 15px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.symbol {
-  margin-top: 2px;
-  font-size: 11px;
-  color: var(--ink-muted);
-}
-
-.class {
-  margin-top: 9px;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.coverage {
-  margin-top: 2px;
-  font-size: 11px;
-  color: var(--ink-muted);
-}
-
-.mint {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin: 0 18px 16px;
-  padding: 7px 10px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--line);
-  background: var(--surface-inset);
-  font-size: 11px;
-  color: var(--ink-secondary);
-  transition: border-color 0.18s ease;
-}
-
-.mint:hover {
-  border-color: var(--line-accent);
-}
-
-.mintAddress {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* --------------------------------------------------------------------------
-   Findings — rows, not six boxes
--------------------------------------------------------------------------- */
-
-.eyebrowRow {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 11px;
-}
-
-.total {
-  font-size: 11px;
-  color: var(--ink-faint);
-}
-
-.findings {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px 16px;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.finding {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-  font-size: 11.5px;
-  min-width: 0;
-}
-
-.findingGlyph {
-  font-size: 8px;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.findingCount {
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1;
-  min-width: 12px;
-}
-
-.findingLabel {
-  color: var(--ink-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* --------------------------------------------------------------------------
-   Market
--------------------------------------------------------------------------- */
-
-.metrics {
-  display: grid;
-  gap: 7px;
-  font-size: 12.5px;
-}
-
-.metricRow {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.metricLabel {
-  color: var(--ink-muted);
-}
-
-.metricValue {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* --------------------------------------------------------------------------
@@ -191,7 +36,8 @@
 -------------------------------------------------------------------------- */
 
 .nav {
-  padding: 10px 10px 12px;
+  padding: 10px;
+  border-top: 1px solid var(--line);
 }
 
 .navList {
@@ -258,16 +104,25 @@
 
 .footnote {
   margin-top: 10px;
-  padding: 0 4px;
+  padding: 0 4px 4px;
   font-size: 10.5px;
   line-height: 1.55;
   color: var(--ink-faint);
 }
 
+/* --------------------------------------------------------------------------
+   Inline summary — the same panel where a sidebar cannot go
+-------------------------------------------------------------------------- */
+
+.inline {
+  width: 100%;
+  /* Above the evidence it introduces, rather than orphaned below it. */
+  order: -1;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .navLink,
-  .navTick,
-  .mint {
+  .navTick {
     transition: none;
   }
 }

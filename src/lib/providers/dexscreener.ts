@@ -222,3 +222,39 @@ export function marketCap(market: MarketData): number | null {
 export function spotPrice(market: MarketData): number | null {
   return pairsByLiquidity(market).find((pair) => pair.priceUsd !== null)?.priceUsd ?? null;
 }
+
+/**
+ * 24h price change from the deepest pool that reports one.
+ *
+ * Deliberately the same selection rule as `spotPrice`, so the change shown
+ * beside a price is the change belonging to that price rather than to some
+ * other pool.
+ */
+export function priceChange24h(market: MarketData): number | null {
+  return (
+    pairsByLiquidity(market).find((pair) => pair.priceChange24h !== null)?.priceChange24h ??
+    null
+  );
+}
+
+/**
+ * Fully diluted valuation from the same pool `marketCap` took its figure from.
+ *
+ * Locking onto that pool matters: searching independently for the deepest pool
+ * that happens to report an FDV can land on a different pool and produce a
+ * pair of figures that contradict each other — USDC reported a $60.9B market
+ * cap beside a $9.3B "fully diluted" valuation, which is impossible. Reading
+ * both from one pool means the two are always talking about the same market.
+ *
+ * Returns null when that pool reports no FDV, rather than borrowing one from
+ * somewhere else.
+ */
+export function fullyDilutedValuation(market: MarketData): number | null {
+  for (const pair of pairsByLiquidity(market)) {
+    const hasMarketCap = pair.marketCap !== null && pair.marketCap > 0;
+    const hasFdv = pair.fdv !== null && pair.fdv > 0;
+    // The first pool with either figure is the one `marketCap` selects.
+    if (hasMarketCap || hasFdv) return hasFdv ? pair.fdv : null;
+  }
+  return null;
+}

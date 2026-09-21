@@ -66,7 +66,12 @@ export default function ReportView({ report }: { report: RiskReport }) {
         <div className={styles.layerLine} />
       </Reveal>
 
-      <div className="flex gap-6 items-start">
+      {/*
+        Column below xl, where the rail has nowhere to sit and renders as an
+        inline summary instead; the row layout and the sticky rail return at
+        xl exactly as before.
+      */}
+      <div className="flex flex-col xl:flex-row gap-6 xl:items-start">
         <main className={`flex-1 min-w-0 ${styles.sections}`}>
           <CategoryProfile categories={report.categories} />
 

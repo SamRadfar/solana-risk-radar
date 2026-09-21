@@ -2,17 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-import type { RiskReport, Severity } from "@/lib/risk-engine/types";
-import {
-  CLASSIFICATION_SHORT,
-  SEVERITY_META,
-  UNAVAILABLE_META,
-  scoreMeta,
-} from "@/lib/severity";
-import { explorerTokenUrl } from "@/lib/solana/knownAddresses";
-import { formatPrice, formatUsd, truncateAddress } from "@/lib/format";
+import type { RiskReport } from "@/lib/risk-engine/types";
 
-import ScoreDial from "./ScoreDial";
+import TokenPanel from "./TokenPanel";
 import { buildSections } from "./sections";
 import styles from "./SummaryRail.module.css";
 
@@ -27,163 +19,71 @@ import styles from "./SummaryRail.module.css";
  * One surface, divided internally. Four stacked cards repeated the page's own
  * problem at a smaller scale; the divisions between these parts are
  * differences of subject, not of container, so they are drawn as hairlines.
+ *
+ * The snapshot itself lives in `TokenPanel`, which is rendered twice: once in
+ * this sticky rail on desktop, and once as an inline summary on narrower
+ * screens where a permanent sidebar has nowhere to sit. Only one is ever
+ * displayed. The section navigation stays with the rail, because it is a
+ * desktop affordance — on a narrow screen the report is a single column and
+ * scrolling is the navigation.
+ *
+ * The rail can outgrow the viewport once the snapshot is in it, so it scrolls
+ * internally rather than letting its lower half become unreachable.
  */
 export default function SummaryRail({ report }: { report: RiskReport }) {
   const sections = buildSections(report);
   const active = useActiveSection(sections.map((s) => s.id));
 
-  const { overview, summary } = report;
-  const meta = scoreMeta(report.score);
-  const symbol = overview.symbol?.toUpperCase() ?? null;
-
-  const counts: { key: Severity | "unavailable"; value: number }[] = [
-    { key: "critical", value: summary.counts.critical },
-    { key: "high", value: summary.counts.high },
-    { key: "medium", value: summary.counts.medium },
-    { key: "low", value: summary.counts.low },
-    { key: "none", value: summary.counts.none },
-    { key: "unavailable", value: summary.counts.unavailable },
-  ];
-  const totalSignals = counts.reduce((sum, entry) => sum + entry.value, 0);
-
   return (
-    <aside
-      className={`hidden xl:block ${styles.rail}`}
-      style={{ top: "calc(var(--header-h) + 20px)" }}
-      aria-label="Report summary"
-    >
-      <div className={`card card-lit ${styles.panel}`}>
-        <div className={styles.verdict}>
-          <ScoreDial
-            score={report.score}
-            classification={report.classification}
-            size={104}
-            compact
-          />
-          <div className={styles.identity}>
-            <div className={styles.nameRow}>
-              {overview.imageUrl && (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={overview.imageUrl} alt="" className={styles.avatar} />
-              )}
-              <span className={styles.name}>{overview.name ?? "Unnamed token"}</span>
-            </div>
-            {symbol && <div className={`font-mono ${styles.symbol}`}>{symbol}</div>}
-            <div className={styles.class} style={{ color: meta.color }}>
-              {CLASSIFICATION_SHORT[report.classification]} risk
-            </div>
-            {report.coveragePercent < 100 && (
-              <div className={styles.coverage}>{report.coveragePercent}% coverage</div>
-            )}
-          </div>
+    <>
+      {/* Desktop: the persistent rail. */}
+      <aside
+        className={`hidden xl:block ${styles.rail}`}
+        style={{ top: "calc(var(--header-h) + 20px)" }}
+        aria-label="Report summary"
+      >
+        <div className={`card card-lit ${styles.panel}`}>
+          <TokenPanel report={report} />
+
+          <nav className={styles.nav} aria-label="Report sections">
+            <ul className={styles.navList}>
+              {sections.map((section) => {
+                const isActive = active === section.id;
+                return (
+                  <li key={section.id}>
+                    <a
+                      href={`#${section.id}`}
+                      aria-current={isActive ? "true" : undefined}
+                      className={styles.navLink}
+                    >
+                      <span className={styles.navInner}>
+                        <span aria-hidden="true" className={styles.navTick} />
+                        <span className={styles.navLabel}>{section.label}</span>
+                      </span>
+                      {section.count !== undefined && (
+                        <span className={`tnum ${styles.navCount}`}>{section.count}</span>
+                      )}
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
         </div>
 
-        <a
-          href={explorerTokenUrl(overview.mint)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`font-mono ${styles.mint}`}
-        >
-          <span className={styles.mintAddress}>{truncateAddress(overview.mint, 10)}</span>
-          <span style={{ color: "var(--accent)" }}>↗</span>
-        </a>
+        <p className={`tnum ${styles.footnote}`}>
+          Analysed in {(report.elapsedMs / 1000).toFixed(1)}s · {report.availableWeight}/
+          {report.totalWeight} signal weight measurable
+        </p>
+      </aside>
 
-        <div className={styles.block}>
-          <div className={styles.eyebrowRow}>
-            <span className="eyebrow">Findings</span>
-            <span className={`tnum ${styles.total}`}>{totalSignals} signals</span>
-          </div>
-          <ul className={styles.findings}>
-            {counts.map(({ key, value }) => {
-              const m = key === "unavailable" ? UNAVAILABLE_META : SEVERITY_META[key];
-              const dim = value === 0;
-              return (
-                <li key={key} className={styles.finding}>
-                  <span
-                    aria-hidden="true"
-                    className={styles.findingGlyph}
-                    style={{ color: dim ? "var(--ink-faint)" : m.color }}
-                  >
-                    {m.glyph}
-                  </span>
-                  <span
-                    className={`tnum ${styles.findingCount}`}
-                    style={{ color: dim ? "var(--ink-faint)" : m.color }}
-                  >
-                    {value}
-                  </span>
-                  <span className={styles.findingLabel}>{m.label}</span>
-                </li>
-              );
-            })}
-          </ul>
+      {/* Narrow screens: the same panel, inline and full width. */}
+      <section className={`xl:hidden ${styles.inline}`} aria-label="Token snapshot">
+        <div className={`card card-lit ${styles.panel}`}>
+          <TokenPanel report={report} />
         </div>
-
-        <div className={styles.block}>
-          <div className={styles.eyebrowRow}>
-            <span className="eyebrow">Market</span>
-          </div>
-          <dl className={styles.metrics}>
-            <Row
-              label="Price"
-              value={overview.priceUsd !== null ? formatPrice(overview.priceUsd) : "—"}
-            />
-            <Row
-              label="Market cap"
-              value={overview.marketCapUsd !== null ? formatUsd(overview.marketCapUsd) : "—"}
-            />
-            <Row label="Program" value={overview.tokenProgram} mono />
-          </dl>
-        </div>
-
-        <nav className={`${styles.block} ${styles.nav}`} aria-label="Report sections">
-          <ul className={styles.navList}>
-            {sections.map((section) => {
-              const isActive = active === section.id;
-              return (
-                <li key={section.id}>
-                  <a
-                    href={`#${section.id}`}
-                    aria-current={isActive ? "true" : undefined}
-                    className={styles.navLink}
-                  >
-                    <span className={styles.navInner}>
-                      <span aria-hidden="true" className={styles.navTick} />
-                      <span className={styles.navLabel}>{section.label}</span>
-                    </span>
-                    {section.count !== undefined && (
-                      <span className={`tnum ${styles.navCount}`}>{section.count}</span>
-                    )}
-                  </a>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-      </div>
-
-      <p className={`tnum ${styles.footnote}`}>
-        Analysed in {(report.elapsedMs / 1000).toFixed(1)}s · {report.availableWeight}/
-        {report.totalWeight} signal weight measurable
-      </p>
-    </aside>
-  );
-}
-
-function Row({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div className={styles.metricRow}>
-      <dt className={styles.metricLabel}>{label}</dt>
-      <dd className={`tnum ${styles.metricValue} ${mono ? "font-mono" : ""}`}>{value}</dd>
-    </div>
+      </section>
+    </>
   );
 }
 
