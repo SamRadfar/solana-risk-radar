@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import type { RiskReport } from "@/lib/risk-engine/types";
 
+import RiskSummary from "./RiskSummary";
 import TokenPanel from "./TokenPanel";
 import { buildSections } from "./sections";
 import styles from "./SummaryRail.module.css";
@@ -31,17 +32,17 @@ import styles from "./SummaryRail.module.css";
  *
  * The snapshot sits in normal document flow and scrolls away with the page:
  * once a reader is deep in the evidence, the token's market figures are
- * context they have already taken in. The navigation beneath it is sticky, so
- * it takes over as the rail's persistent element and stays available for the
- * whole report. The handoff is the page scrolling, not a state change, so
- * nothing jumps.
+ * context they have already taken in. The verdict and the navigation beneath
+ * it are one sticky group, so the answer stays on screen with the means of
+ * moving around the argument for it. The handoff is the page scrolling, not a
+ * state change, so nothing jumps.
  *
  * This replaces pinning the whole rail, which only worked on viewports tall
  * enough to hold all of it and otherwise left the navigation below the fold.
  * There is still no scroll container anywhere in here: the page remains the
  * only thing that scrolls.
  *
- * The navigation is deliberately outside the snapshot's card. `overflow:
+ * The sticky group is deliberately outside the snapshot's card. `overflow:
  * hidden` on an ancestor makes it that element's scroll container, and a
  * sticky element inside one that never scrolls simply never sticks.
  */
@@ -57,30 +58,34 @@ export default function SummaryRail({ report }: { report: RiskReport }) {
           <TokenPanel report={report} />
         </div>
 
-        <nav className={`card ${styles.nav}`} aria-label="Report sections">
-          <ul className={styles.navList}>
-            {sections.map((section) => {
-              const isActive = active === section.id;
-              return (
-                <li key={section.id}>
-                  <a
-                    href={`#${section.id}`}
-                    aria-current={isActive ? "true" : undefined}
-                    className={styles.navLink}
-                  >
-                    <span className={styles.navInner}>
-                      <span aria-hidden="true" className={styles.navTick} />
-                      <span className={styles.navLabel}>{section.label}</span>
-                    </span>
-                    {section.count !== undefined && (
-                      <span className={`tnum ${styles.navCount}`}>{section.count}</span>
-                    )}
-                  </a>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
+        <div className={`card card-lit ${styles.sticky}`}>
+          <RiskSummary report={report} />
+
+          <nav className={styles.nav} aria-label="Report sections">
+            <ul className={styles.navList}>
+              {sections.map((section) => {
+                const isActive = active === section.id;
+                return (
+                  <li key={section.id}>
+                    <a
+                      href={`#${section.id}`}
+                      aria-current={isActive ? "true" : undefined}
+                      className={styles.navLink}
+                    >
+                      <span className={styles.navInner}>
+                        <span aria-hidden="true" className={styles.navTick} />
+                        <span className={styles.navLabel}>{section.label}</span>
+                      </span>
+                      {section.count !== undefined && (
+                        <span className={`tnum ${styles.navCount}`}>{section.count}</span>
+                      )}
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+        </div>
       </aside>
 
       {/* Narrow screens: the same panel, inline and full width. */}

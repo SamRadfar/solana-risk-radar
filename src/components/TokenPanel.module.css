@@ -65,7 +65,7 @@
 -------------------------------------------------------------------------- */
 
 .addressRow {
-  padding: 0 16px 11px;
+  padding: 0 16px 13px;
 }
 
 .copy {
@@ -107,33 +107,6 @@
 /* --------------------------------------------------------------------------
    Risk summary
 -------------------------------------------------------------------------- */
-
-/*
- * The verdict module. Centred, and given room — it is the answer the rest of
- * the panel supports, so it is the one place here that is allowed to breathe.
- */
-.verdict {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 14px 16px 18px;
-  border-top: 1px solid var(--line);
-}
-
-.classification {
-  margin-top: 10px;
-  font-size: 16.5px;
-  font-weight: 600;
-  letter-spacing: -0.015em;
-  line-height: 1.2;
-}
-
-.riskMeta {
-  margin-top: 5px;
-  font-size: 11.5px;
-  color: var(--ink-muted);
-}
 
 /* --------------------------------------------------------------------------
    Blocks

@@ -49,24 +49,31 @@
 -------------------------------------------------------------------------- */
 
 /*
- * The navigation: the rail's persistent element once the snapshot has gone.
+ * The sticky group: the verdict and the navigation, together.
  *
- * It carries its own surface at all times rather than gaining one on the way
- * past, because a background that appears mid-scroll is exactly the kind of
- * visible state change this handoff should not have. `align-self: start`
- * keeps it its own height inside the stretched rail, which is what lets it
- * stick rather than filling the column.
+ * They pin as one surface, so the answer and the way around the argument for
+ * it stay on screen as a unit once the snapshot has gone. It carries its
+ * background at all times rather than gaining one on the way past, because a
+ * surface that appears mid-scroll is exactly the kind of visible state change
+ * this handoff should not have. `align-self: start` keeps it its own height
+ * inside the stretched rail, which is what lets it stick rather than filling
+ * the column.
  */
-.nav {
+.sticky {
   position: sticky;
   top: calc(var(--header-h) + 12px);
   align-self: flex-start;
   width: 100%;
-  padding: 7px;
   /* Prefixed first, standard last: the minifier keeps whichever is declared
      last, and this browser reports the prefixed property as unsupported. */
   -webkit-backdrop-filter: blur(14px) saturate(130%);
   backdrop-filter: blur(14px) saturate(130%);
+}
+
+/* Divided from the verdict above it, not boxed separately from it. */
+.nav {
+  padding: 7px;
+  border-top: 1px solid var(--line);
 }
 
 .navList {

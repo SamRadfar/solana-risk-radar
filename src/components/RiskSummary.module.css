@@ -1,0 +1,29 @@
+/*
+ * The verdict module. Centred, and given room — it is the answer the rest of
+ * the rail supports, so it is the one place here that is allowed to breathe.
+ *
+ * Carried over verbatim from the snapshot panel, minus the divider that used
+ * to separate it from the row above it: it now opens its own surface, so a
+ * rule across the top would just be a line under the card's edge.
+ */
+.verdict {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 14px 16px 18px;
+}
+
+.classification {
+  margin-top: 10px;
+  font-size: 16.5px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+}
+
+.riskMeta {
+  margin-top: 5px;
+  font-size: 11.5px;
+  color: var(--ink-muted);
+}

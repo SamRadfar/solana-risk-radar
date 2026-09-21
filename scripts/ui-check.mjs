@@ -133,12 +133,28 @@ for (const viewport of VIEWPORTS) {
         const style = getComputedStyle(el);
         const panel = el.firstElementChild;
         const navBlock = el.querySelector("nav");
+        const dial = el.querySelector('[role="img"]');
+
+        // The verdict and the navigation pin as one group, so what sticks is
+        // their shared container rather than either of them.
+        let group = navBlock.parentElement;
+        while (group && group !== el && getComputedStyle(group).position !== "sticky") {
+          group = group.parentElement;
+        }
+        const stuck = group && group !== el ? getComputedStyle(group) : null;
+
         return {
           overflowY: style.overflowY,
           ownScrollbar: el.scrollHeight > el.clientHeight + 1,
           snapshotPosition: getComputedStyle(panel).position,
-          navPosition: getComputedStyle(navBlock).position,
-          navTop: getComputedStyle(navBlock).top,
+          snapshotHoldsVerdict: !!panel.querySelector('[role="img"]'),
+          groupPosition: stuck ? stuck.position : "none",
+          groupTop: stuck ? stuck.top : "",
+          verdictAboveNav:
+            !!dial &&
+            !!group &&
+            group.contains(dial) &&
+            dial.getBoundingClientRect().bottom <= navBlock.getBoundingClientRect().top,
         };
       });
       check(
@@ -147,14 +163,20 @@ for (const viewport of VIEWPORTS) {
         `overflow-y: ${railShape.overflowY}`,
       );
       check(
-        railShape.snapshotPosition !== "sticky" && railShape.snapshotPosition !== "fixed",
-        "snapshot sits in normal flow and can scroll away",
+        railShape.snapshotPosition !== "sticky" &&
+          railShape.snapshotPosition !== "fixed" &&
+          !railShape.snapshotHoldsVerdict,
+        "snapshot sits in normal flow, without the verdict, and can scroll away",
         railShape.snapshotPosition,
       );
       check(
-        railShape.navPosition === "sticky" && parseFloat(railShape.navTop) > 0,
-        "section navigation is sticky, offset below the header",
-        `${railShape.navPosition} at top ${railShape.navTop}`,
+        railShape.groupPosition === "sticky" && parseFloat(railShape.groupTop) > 0,
+        "verdict and navigation pin together, offset below the header",
+        `${railShape.groupPosition} at top ${railShape.groupTop}`,
+      );
+      check(
+        railShape.verdictAboveNav,
+        "verdict sits directly above the navigation inside that group",
       );
     }
   }
