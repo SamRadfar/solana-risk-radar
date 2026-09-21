@@ -43,6 +43,11 @@ export interface Interpretation {
   totalPoints: number;
   /** One deterministic sentence describing the composition above. */
   sentence: string;
+  /**
+   * The same finding compressed to a headline. Short enough to be set large,
+   * which is the only reason it exists separately from `sentence`.
+   */
+  statement: string;
 }
 
 /**
@@ -150,7 +155,32 @@ export function interpretCategories(categories: CategoryScore[]): Interpretation
     unmeasured,
     totalPoints,
     sentence: buildSentence(contributions, totalPoints, unmeasured.length),
+    statement: buildStatement(contributions, totalPoints),
   };
+}
+
+/**
+ * The headline form.
+ *
+ * Deliberately one clause: it is set at display size, and a second clause at
+ * that size stops being a headline and becomes a paragraph. The qualifying
+ * detail lives in `sentence` directly beneath it.
+ */
+function buildStatement(
+  contributions: CategoryContribution[],
+  totalPoints: number,
+): string {
+  if (contributions.length === 0) return "Nothing could be measured.";
+  if (totalPoints === 0) return "Every measured category came back clean.";
+
+  const charged = contributions.filter((c) => c.points > 0);
+  const top = charged[0];
+
+  if (top.share < SPREAD_SHARE && charged.length > 2) {
+    return "No single category dominated this result.";
+  }
+
+  return `${top.sharePercent}% of measured risk came from ${CATEGORY_LANGUAGE[top.category].source}.`;
 }
 
 function buildSentence(

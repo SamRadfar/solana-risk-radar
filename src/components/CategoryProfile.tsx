@@ -1,6 +1,10 @@
 import type { CategoryScore } from "@/lib/risk-engine/types";
 import { scoreColor, scoreMeta } from "@/lib/severity";
 
+import Reveal from "./Reveal";
+import SectionHead from "./SectionHead";
+import styles from "./CategoryProfile.module.css";
+
 /**
  * The token's risk profile across categories.
  *
@@ -11,22 +15,34 @@ import { scoreColor, scoreMeta } from "@/lib/severity";
  *
  * Magnitude is carried by bar length (a non-colour channel); colour only
  * reinforces it, and every row is labelled with its exact value.
+ *
+ * The section carries no card. It is a chart, and a chart does not need a
+ * rounded rectangle around it to be understood — the headline, the rule
+ * beneath it and the space either side mark where it begins and ends. Freed
+ * from the card's padding, the bars run the full width of the column, which is
+ * also what makes them readable at a glance.
  */
 export default function CategoryProfile({
   categories,
 }: {
   categories: CategoryScore[];
 }) {
-  return (
-    <section id="profile" className="anchor card card-lit p-5 sm:p-6">
-      <header className="flex items-baseline justify-between gap-3 flex-wrap">
-        <h3 className="text-[15px] font-semibold">Risk profile by category</h3>
-        <p className="text-xs" style={{ color: "var(--ink-muted)" }}>
-          Equal weight · share of each category&rsquo;s measurable weight charged
-        </p>
-      </header>
+  const measurable = categories.filter((category) => category.percent !== null).length;
 
-      <ul className="mt-5 space-y-4">
+  return (
+    <section id="profile" className="anchor">
+      <SectionHead
+        eyebrow="Risk profile"
+        title="Risk profile by category"
+        caption="Each bar is the share of that category's own measurable weight that was charged. All five carry equal weight in the score."
+        meta={
+          <>
+            {measurable} of {categories.length} measurable
+          </>
+        }
+      />
+
+      <Reveal as="ul" className={styles.rows}>
         {categories.map((category) => {
           const measured = category.percent !== null;
           const percent = category.percent ?? 0;
@@ -34,28 +50,34 @@ export default function CategoryProfile({
           const meta = measured ? scoreMeta(percent) : null;
 
           return (
-            <li key={category.category}>
-              <div className="flex items-baseline justify-between gap-3 mb-2">
-                <div className="flex items-baseline gap-2.5 min-w-0">
-                  <span className="text-sm font-medium truncate">{category.category}</span>
-                  <span
-                    className="text-[11px] shrink-0"
-                    style={{ color: "var(--ink-faint)" }}
-                  >
-                    {category.signalCount} signal{category.signalCount === 1 ? "" : "s"}
-                  </span>
-                </div>
-                <span
-                  className="tnum text-sm font-semibold shrink-0"
-                  style={{ color: measured ? color : "var(--ink-muted)" }}
-                >
-                  {measured ? `${percent}%` : "not measured"}
+            <li key={category.category} className={styles.row}>
+              <div className={styles.label}>
+                <span className={styles.name}>{category.category}</span>
+                <span className={styles.count}>
+                  {category.signalCount} signal{category.signalCount === 1 ? "" : "s"}
                 </span>
               </div>
 
+              <div className={styles.readout}>
+                {measured ? (
+                  <>
+                    <span className={`tnum ${styles.value}`} style={{ color }}>
+                      {percent}
+                      <span className={styles.unit}>%</span>
+                    </span>
+                    {meta && (
+                      <span className={styles.level} style={{ color }}>
+                        <span aria-hidden="true">{meta.glyph}</span> {meta.label}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className={styles.absent}>not measured</span>
+                )}
+              </div>
+
               <div
-                className="relative h-2.5 rounded-full overflow-hidden"
-                style={{ background: "rgba(255,255,255,0.05)" }}
+                className={styles.track}
                 role="img"
                 aria-label={
                   measured
@@ -68,32 +90,33 @@ export default function CategoryProfile({
                   <span
                     key={mark}
                     aria-hidden="true"
-                    className="absolute top-0 bottom-0 w-px"
-                    style={{ left: `${mark}%`, background: "rgba(255,255,255,0.07)" }}
+                    className={styles.mark}
+                    style={{ left: `${mark}%` }}
                   />
                 ))}
 
                 {measured && percent > 0 && (
-                  <div
-                    className="absolute inset-y-0 left-0 rounded-full"
+                  <span
+                    className={styles.fill}
                     style={{
-                      width: `${Math.max(percent, 1.5)}%`,
+                      /*
+                       * Held as a scale rather than a width so growing the bar
+                       * on reveal stays on the compositor. The floor keeps a
+                       * small but non-zero charge visible.
+                       */
+                      "--fill": Math.max(percent / 100, 0.015),
                       background: `linear-gradient(90deg, ${color}66 0%, ${color} 100%)`,
-                      boxShadow: meta ? `0 0 12px -2px ${meta.glow}` : undefined,
-                      transition: "width 1s cubic-bezier(0.16,1,0.3,1)",
-                    }}
+                      boxShadow: meta ? `0 0 14px -3px ${meta.glow}` : undefined,
+                    } as React.CSSProperties}
                   />
                 )}
               </div>
             </li>
           );
         })}
-      </ul>
+      </Reveal>
 
-      <p
-        className="mt-5 pt-4 text-[11px] leading-relaxed"
-        style={{ borderTop: "1px solid var(--line)", color: "var(--ink-faint)" }}
-      >
+      <p className={styles.note}>
         Categories combine as a quadratic mean, not an average — clean dimensions cannot
         cancel out severe ones. One fully compromised category scores 45; two score 63.
       </p>

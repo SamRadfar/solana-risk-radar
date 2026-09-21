@@ -28,8 +28,11 @@ export function buildSections(report: RiskReport): ReportSection[] {
   if (flagged.length > 0) {
     sections.push({ id: "flagged", label: "Flagged signals", count: flagged.length });
   }
+  // The interpretation always renders, even when nothing was charged — it then
+  // says so, which is itself the answer to "what shaped this verdict".
+  sections.push({ id: "landscape", label: "Interpretation" });
   if (clean.length > 0) {
-    sections.push({ id: "clean", label: "No concern", count: clean.length });
+    sections.push({ id: "clean", label: "Checks passed", count: clean.length });
   }
   sections.push({ id: "distribution", label: "Holders" });
   if (unmeasured.length > 0) {

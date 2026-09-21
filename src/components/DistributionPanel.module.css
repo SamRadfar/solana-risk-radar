@@ -1,0 +1,278 @@
+/**
+ * Holder distribution — an open chart.
+ *
+ * The four headline figures are set as figures, separated by rules rather than
+ * boxed as tiles, and the ranking bars run the full width of the column.
+ */
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+}
+
+.metric {
+  position: relative;
+  padding: 2px 20px 2px 0;
+}
+
+.metric + .metric {
+  padding-left: 20px;
+}
+
+.metric + .metric::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 4px;
+  width: 1px;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.1), transparent 90%);
+}
+
+.metricLabel {
+  font-size: 11.5px;
+  color: var(--ink-muted);
+}
+
+.metricValue {
+  margin-top: 7px;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+  color: var(--ink-secondary);
+}
+
+.metric[data-emphasis="true"] .metricValue {
+  color: var(--ink);
+}
+
+.metricHint {
+  margin-top: 5px;
+  font-size: 10.5px;
+  color: var(--ink-faint);
+}
+
+/* --------------------------------------------------------------------------
+   Ranking
+-------------------------------------------------------------------------- */
+
+.ranking {
+  margin-top: 34px;
+  list-style: none;
+  padding: 0;
+}
+
+.holder {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 13px 0;
+}
+
+.holder + .holder {
+  border-top: 1px solid var(--line);
+}
+
+.rank {
+  font-size: 11px;
+  text-align: right;
+  color: var(--ink-faint);
+}
+
+.holderBody {
+  min-width: 0;
+}
+
+.holderTop {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.address {
+  font-size: 12.5px;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  transition: color 0.18s ease;
+}
+
+.address:hover {
+  color: var(--accent);
+}
+
+.kind {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.excluded {
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+
+.track {
+  position: relative;
+  margin-top: 9px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+
+/* Bars grow in as the ranking arrives, top account first. */
+[data-reveal="in"] .fill {
+  transform: scaleX(var(--fill));
+  transition: transform 850ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-reveal="in"] .holder:nth-child(1) .fill {
+  transition-delay: 60ms;
+}
+[data-reveal="in"] .holder:nth-child(2) .fill {
+  transition-delay: 105ms;
+}
+[data-reveal="in"] .holder:nth-child(3) .fill {
+  transition-delay: 150ms;
+}
+[data-reveal="in"] .holder:nth-child(4) .fill {
+  transition-delay: 195ms;
+}
+[data-reveal="in"] .holder:nth-child(n + 5) .fill {
+  transition-delay: 240ms;
+}
+
+.holderFigures {
+  text-align: right;
+}
+
+.share {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.amount {
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+
+.more {
+  margin-top: 18px;
+  padding: 6px 13px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* --------------------------------------------------------------------------
+   Notes
+-------------------------------------------------------------------------- */
+
+.notes {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  max-width: 82ch;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--ink-faint);
+  display: grid;
+  gap: 8px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding-top: 4px;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-muted);
+}
+
+.legendDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+}
+
+.absent {
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 70ch;
+  color: var(--ink-secondary);
+}
+
+/* --------------------------------------------------------------------------
+   Responsive
+-------------------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 22px;
+  }
+
+  /* With two columns, only the second in each row needs a rule beside it. */
+  .metric:nth-child(odd) {
+    padding-left: 0;
+  }
+
+  .metric:nth-child(odd)::before {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .metricValue {
+    font-size: 21px;
+  }
+
+  .holder {
+    grid-template-columns: 1.3rem minmax(0, 1fr) auto;
+    gap: 11px;
+  }
+
+  .amount {
+    display: none;
+  }
+
+  .ranking {
+    margin-top: 26px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill,
+  [data-reveal="in"] .fill {
+    transform: scaleX(var(--fill));
+    transition: none;
+    transition-delay: 0ms;
+  }
+}
+
+@media (scripting: none) {
+  .fill {
+    transform: scaleX(var(--fill));
+  }
+}

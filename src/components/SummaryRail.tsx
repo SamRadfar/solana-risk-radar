@@ -14,6 +14,7 @@ import { formatPrice, formatUsd, truncateAddress } from "@/lib/format";
 
 import ScoreDial from "./ScoreDial";
 import { buildSections } from "./sections";
+import styles from "./SummaryRail.module.css";
 
 /**
  * The persistent right-hand rail (desktop only).
@@ -22,6 +23,10 @@ import { buildSections } from "./sections";
  * is, what the verdict is, how many findings there are, and where they are in
  * the report. Everything here is a *summary*; the argument itself lives in the
  * main column, so nothing is duplicated between the two.
+ *
+ * One surface, divided internally. Four stacked cards repeated the page's own
+ * problem at a smaller scale; the divisions between these parts are
+ * differences of subject, not of container, so they are drawn as hairlines.
  */
 export default function SummaryRail({ report }: { report: RiskReport }) {
   const sections = buildSections(report);
@@ -39,55 +44,36 @@ export default function SummaryRail({ report }: { report: RiskReport }) {
     { key: "none", value: summary.counts.none },
     { key: "unavailable", value: summary.counts.unavailable },
   ];
+  const totalSignals = counts.reduce((sum, entry) => sum + entry.value, 0);
 
   return (
     <aside
-      className="hidden xl:flex flex-col gap-3 w-[332px] shrink-0 sticky self-start"
+      className={`hidden xl:block ${styles.rail}`}
       style={{ top: "calc(var(--header-h) + 20px)" }}
       aria-label="Report summary"
     >
-      {/* Verdict */}
-      <div className="card card-lit p-5">
-        <div className="flex items-center gap-4">
+      <div className={`card card-lit ${styles.panel}`}>
+        <div className={styles.verdict}>
           <ScoreDial
             score={report.score}
             classification={report.classification}
             size={104}
             compact
           />
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 min-w-0">
+          <div className={styles.identity}>
+            <div className={styles.nameRow}>
               {overview.imageUrl && (
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={overview.imageUrl}
-                  alt=""
-                  className="h-6 w-6 rounded-full object-cover shrink-0"
-                  style={{ border: "1px solid var(--line)" }}
-                />
+                <img src={overview.imageUrl} alt="" className={styles.avatar} />
               )}
-              <span className="font-semibold truncate text-[15px]">
-                {overview.name ?? "Unnamed token"}
-              </span>
+              <span className={styles.name}>{overview.name ?? "Unnamed token"}</span>
             </div>
-            {symbol && (
-              <div
-                className="font-mono text-[11px] mt-0.5"
-                style={{ color: "var(--ink-muted)" }}
-              >
-                {symbol}
-              </div>
-            )}
-            <div
-              className="mt-2 text-[13px] font-medium"
-              style={{ color: meta.color }}
-            >
+            {symbol && <div className={`font-mono ${styles.symbol}`}>{symbol}</div>}
+            <div className={styles.class} style={{ color: meta.color }}>
               {CLASSIFICATION_SHORT[report.classification]} risk
             </div>
             {report.coveragePercent < 100 && (
-              <div className="text-[11px] mt-0.5" style={{ color: "var(--ink-muted)" }}>
-                {report.coveragePercent}% coverage
-              </div>
+              <div className={styles.coverage}>{report.coveragePercent}% coverage</div>
             )}
           </div>
         </div>
@@ -96,108 +82,89 @@ export default function SummaryRail({ report }: { report: RiskReport }) {
           href={explorerTokenUrl(overview.mint)}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-4 flex items-center justify-between gap-2 inset px-3 py-2 font-mono text-[11px] transition-colors hover:border-[var(--line-accent)]"
-          style={{ color: "var(--ink-secondary)" }}
+          className={`font-mono ${styles.mint}`}
         >
-          <span className="truncate">{truncateAddress(overview.mint, 10)}</span>
+          <span className={styles.mintAddress}>{truncateAddress(overview.mint, 10)}</span>
           <span style={{ color: "var(--accent)" }}>↗</span>
         </a>
-      </div>
 
-      {/* Findings */}
-      <div className="card p-4">
-        <div className="eyebrow mb-3">Findings</div>
-        <div className="grid grid-cols-3 gap-2">
-          {counts.map(({ key, value }) => {
-            const m = key === "unavailable" ? UNAVAILABLE_META : SEVERITY_META[key];
-            const dim = value === 0;
-            return (
-              <div
-                key={key}
-                className="inset px-2 py-2 text-center"
-                style={{
-                  borderColor: dim ? "var(--line)" : m.border,
-                  background: dim ? "var(--surface-inset)" : m.soft,
-                }}
-              >
-                <div
-                  className="tnum text-lg font-semibold leading-none"
-                  style={{ color: dim ? "var(--ink-faint)" : m.color }}
-                >
-                  {value}
-                </div>
-                <div
-                  className="text-[10px] mt-1 leading-tight"
-                  style={{ color: "var(--ink-muted)" }}
-                >
-                  {m.label}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Key metrics */}
-      <div className="card p-4">
-        <div className="eyebrow mb-3">Market</div>
-        <dl className="space-y-2 text-[13px]">
-          <Row
-            label="Price"
-            value={overview.priceUsd !== null ? formatPrice(overview.priceUsd) : "—"}
-          />
-          <Row
-            label="Market cap"
-            value={overview.marketCapUsd !== null ? formatUsd(overview.marketCapUsd) : "—"}
-          />
-          <Row label="Program" value={overview.tokenProgram} mono />
-        </dl>
-      </div>
-
-      {/* Navigation */}
-      <nav className="card p-2" aria-label="Report sections">
-        <ul>
-          {sections.map((section) => {
-            const isActive = active === section.id;
-            return (
-              <li key={section.id}>
-                <a
-                  href={`#${section.id}`}
-                  aria-current={isActive ? "true" : undefined}
-                  className="flex items-center justify-between gap-2 px-3 py-2 rounded-[10px] text-[13px] transition-colors"
-                  style={{
-                    color: isActive ? "var(--ink)" : "var(--ink-muted)",
-                    background: isActive ? "rgba(56,214,236,0.08)" : "transparent",
-                  }}
-                >
-                  <span className="flex items-center gap-2.5 min-w-0">
-                    <span
-                      aria-hidden="true"
-                      className="h-3.5 w-[2px] rounded-full shrink-0 transition-colors"
-                      style={{
-                        background: isActive ? "var(--accent)" : "var(--line-strong)",
-                      }}
-                    />
-                    <span className="truncate">{section.label}</span>
+        <div className={styles.block}>
+          <div className={styles.eyebrowRow}>
+            <span className="eyebrow">Findings</span>
+            <span className={`tnum ${styles.total}`}>{totalSignals} signals</span>
+          </div>
+          <ul className={styles.findings}>
+            {counts.map(({ key, value }) => {
+              const m = key === "unavailable" ? UNAVAILABLE_META : SEVERITY_META[key];
+              const dim = value === 0;
+              return (
+                <li key={key} className={styles.finding}>
+                  <span
+                    aria-hidden="true"
+                    className={styles.findingGlyph}
+                    style={{ color: dim ? "var(--ink-faint)" : m.color }}
+                  >
+                    {m.glyph}
                   </span>
-                  {section.count !== undefined && (
-                    <span
-                      className="tnum text-[11px] shrink-0"
-                      style={{ color: "var(--ink-faint)" }}
-                    >
-                      {section.count}
-                    </span>
-                  )}
-                </a>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
+                  <span
+                    className={`tnum ${styles.findingCount}`}
+                    style={{ color: dim ? "var(--ink-faint)" : m.color }}
+                  >
+                    {value}
+                  </span>
+                  <span className={styles.findingLabel}>{m.label}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
 
-      <p className="text-[11px] leading-relaxed px-1" style={{ color: "var(--ink-faint)" }}>
-        Analysed in {(report.elapsedMs / 1000).toFixed(1)}s ·{" "}
-        {report.availableWeight}/{report.totalWeight} signal weight measurable
+        <div className={styles.block}>
+          <div className={styles.eyebrowRow}>
+            <span className="eyebrow">Market</span>
+          </div>
+          <dl className={styles.metrics}>
+            <Row
+              label="Price"
+              value={overview.priceUsd !== null ? formatPrice(overview.priceUsd) : "—"}
+            />
+            <Row
+              label="Market cap"
+              value={overview.marketCapUsd !== null ? formatUsd(overview.marketCapUsd) : "—"}
+            />
+            <Row label="Program" value={overview.tokenProgram} mono />
+          </dl>
+        </div>
+
+        <nav className={`${styles.block} ${styles.nav}`} aria-label="Report sections">
+          <ul className={styles.navList}>
+            {sections.map((section) => {
+              const isActive = active === section.id;
+              return (
+                <li key={section.id}>
+                  <a
+                    href={`#${section.id}`}
+                    aria-current={isActive ? "true" : undefined}
+                    className={styles.navLink}
+                  >
+                    <span className={styles.navInner}>
+                      <span aria-hidden="true" className={styles.navTick} />
+                      <span className={styles.navLabel}>{section.label}</span>
+                    </span>
+                    {section.count !== undefined && (
+                      <span className={`tnum ${styles.navCount}`}>{section.count}</span>
+                    )}
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      </div>
+
+      <p className={`tnum ${styles.footnote}`}>
+        Analysed in {(report.elapsedMs / 1000).toFixed(1)}s · {report.availableWeight}/
+        {report.totalWeight} signal weight measurable
       </p>
     </aside>
   );
@@ -213,9 +180,9 @@ function Row({
   mono?: boolean;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt style={{ color: "var(--ink-muted)" }}>{label}</dt>
-      <dd className={`tnum truncate ${mono ? "font-mono text-[12px]" : ""}`}>{value}</dd>
+    <div className={styles.metricRow}>
+      <dt className={styles.metricLabel}>{label}</dt>
+      <dd className={`tnum ${styles.metricValue} ${mono ? "font-mono" : ""}`}>{value}</dd>
     </div>
   );
 }

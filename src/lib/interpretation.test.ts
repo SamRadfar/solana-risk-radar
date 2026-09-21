@@ -142,6 +142,45 @@ describe("interpretCategories", () => {
     expect(result.contributions.map((c) => c.sharePercent).sort()).toEqual([33, 33, 34]);
   });
 
+  describe("statement", () => {
+    it("leads with the dominant category and its share", () => {
+      const result = interpretCategories([
+        category("Holders", 14, 70),
+        category("Liquidity", 6, 30),
+      ]);
+      expect(result.statement).toBe("70% of measured risk came from holder concentration.");
+    });
+
+    it("refuses to name a leader when none leads", () => {
+      const result = interpretCategories([
+        category("Holders", 5, 25),
+        category("Liquidity", 5, 25),
+        category("Market Activity", 4, 20),
+        category("Maturity", 4, 20),
+        category("Authorities", 2, 10),
+      ]);
+      expect(result.statement).toBe("No single category dominated this result.");
+    });
+
+    it("states the clean and unmeasurable cases plainly", () => {
+      expect(interpretCategories([category("Holders", 0, 0)]).statement).toBe(
+        "Every measured category came back clean.",
+      );
+      expect(interpretCategories([category("Holders", 0, null)]).statement).toBe(
+        "Nothing could be measured.",
+      );
+    });
+
+    it("stays short enough to set at display size", () => {
+      const result = interpretCategories([
+        category("Market Activity", 14, 70),
+        category("Liquidity", 6, 30),
+      ]);
+      expect(result.statement.length).toBeLessThan(70);
+      expect(result.statement.split(".").filter(Boolean)).toHaveLength(1);
+    });
+  });
+
   it("orders contributions by points, largest first", () => {
     const result = interpretCategories([
       category("Maturity", 2, 10),

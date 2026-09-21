@@ -1,0 +1,146 @@
+/**
+ * The provenance strip. The quietest section on the page by design: a rule, a
+ * row of sources and one line of run metadata.
+ */
+
+.strip {
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+
+.head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.title {
+  margin-top: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--accent);
+  transition: color 0.2s ease;
+}
+
+.toggle[aria-expanded="true"] {
+  color: var(--ink-secondary);
+}
+
+.chevron {
+  font-size: 9px;
+  transition: transform 0.25s ease;
+}
+
+.toggle[aria-expanded="true"] .chevron {
+  transform: rotate(180deg);
+}
+
+/* --------------------------------------------------------------------------
+   The strip itself
+-------------------------------------------------------------------------- */
+
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 26px;
+  margin-top: 16px;
+  list-style: none;
+  padding: 0;
+}
+
+.source {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  transform: translateY(-1px);
+}
+
+.sourceName {
+  color: var(--ink-secondary);
+  white-space: nowrap;
+}
+
+.sourceState {
+  font-size: 10.5px;
+  color: var(--ink-faint);
+}
+
+.source[data-ok="false"] .sourceName {
+  color: var(--ink-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Detail disclosure
+-------------------------------------------------------------------------- */
+
+.details {
+  display: grid;
+  gap: 9px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.detailRow {
+  display: grid;
+  grid-template-columns: minmax(0, 10rem) 1fr;
+  column-gap: 16px;
+  row-gap: 2px;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+.detailName {
+  color: var(--ink-muted);
+}
+
+.detailValue {
+  color: var(--ink-secondary);
+  line-height: 1.55;
+}
+
+.meta {
+  margin-top: 18px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink-faint);
+}
+
+@media (max-width: 640px) {
+  .sources {
+    gap: 9px 18px;
+  }
+
+  .detailRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron,
+  .toggle {
+    transition: none;
+  }
+}

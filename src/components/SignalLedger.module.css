@@ -1,0 +1,379 @@
+/**
+ * The risk ledger.
+ *
+ * No row is a card: each is bounded by a hairline above it and a severity rail
+ * at its left edge. Weight varies by severity through type size, rail opacity,
+ * badge fill and row padding, so a critical entry reads as heavier than a low
+ * one instead of every finding occupying an identical rectangle.
+ */
+
+.ledger {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.row {
+  position: relative;
+  padding: 20px 0 20px 18px;
+  transition: background 0.25s ease;
+}
+
+.row + .row {
+  border-top: 1px solid var(--line);
+}
+
+.rail {
+  position: absolute;
+  left: 0;
+  top: 16px;
+  bottom: 16px;
+  width: 2px;
+  border-radius: 999px;
+}
+
+/* --------------------------------------------------------------------------
+   Severity weighting
+-------------------------------------------------------------------------- */
+
+.row[data-weight="strong"] {
+  padding-top: 24px;
+  padding-bottom: 24px;
+}
+
+.row[data-weight="strong"] .rail {
+  width: 3px;
+  top: 18px;
+  bottom: 18px;
+}
+
+.row[data-weight="strong"] .name {
+  font-size: 17px;
+}
+
+.row[data-weight="strong"] .observedValue {
+  font-size: 16px;
+}
+
+.row[data-weight="quiet"],
+.row[data-weight="muted"] {
+  padding-top: 15px;
+  padding-bottom: 15px;
+}
+
+.row[data-weight="quiet"] .name,
+.row[data-weight="muted"] .name {
+  font-size: 14.5px;
+  font-weight: 500;
+}
+
+.row[data-weight="quiet"] .explanation,
+.row[data-weight="muted"] .explanation {
+  color: var(--ink-muted);
+  font-size: 12.5px;
+}
+
+.row[data-weight="muted"] .rail {
+  opacity: 0.5;
+}
+
+.row:hover,
+.row[data-open="true"] {
+  background: rgba(255, 255, 255, 0.016);
+}
+
+/* --------------------------------------------------------------------------
+   Layout
+-------------------------------------------------------------------------- */
+
+.grid {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr) minmax(0, 200px) 120px;
+  grid-template-areas:
+    "severity identity observed contribution"
+    ".        explanation explanation action";
+  column-gap: 20px;
+  row-gap: 12px;
+  align-items: start;
+}
+
+.severity {
+  grid-area: severity;
+  padding-top: 2px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.glyph {
+  font-size: 8px;
+  line-height: 1;
+}
+
+.identity {
+  grid-area: identity;
+  min-width: 0;
+}
+
+.name {
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.metric {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--ink-muted);
+}
+
+.observed {
+  grid-area: observed;
+  min-width: 0;
+  padding-top: 1px;
+}
+
+/* The measured value is the point of the row, so it is set like one. */
+.observedValue {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.contribution {
+  grid-area: contribution;
+  text-align: right;
+}
+
+.points {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.outOf {
+  font-size: 11px;
+  color: var(--ink-faint);
+  font-weight: 400;
+}
+
+.excluded {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-faint);
+}
+
+.bar {
+  display: block;
+  margin: 8px 0 0 auto;
+  height: 3px;
+  width: 78px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+
+[data-reveal="in"] .barFill {
+  transform: scaleX(var(--fill));
+  transition: transform 800ms cubic-bezier(0.16, 1, 0.3, 1) 220ms;
+}
+
+.pointsLabel {
+  display: block;
+  margin-top: 5px;
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+
+.explanation {
+  grid-area: explanation;
+  max-width: 74ch;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-secondary);
+}
+
+.action {
+  grid-area: action;
+  text-align: right;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color 0.2s ease;
+}
+
+.chevron {
+  font-size: 9px;
+  transition: transform 0.25s ease;
+}
+
+.row[data-open="true"] .chevron {
+  transform: rotate(180deg);
+}
+
+/* --------------------------------------------------------------------------
+   Evidence
+-------------------------------------------------------------------------- */
+
+.panel {
+  margin: 14px 0 2px 18px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.26);
+}
+
+.evidence {
+  display: grid;
+  gap: 8px;
+}
+
+.evidenceRow {
+  display: grid;
+  grid-template-columns: minmax(0, 10.5rem) 1fr;
+  column-gap: 14px;
+  row-gap: 2px;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+.evidenceLabel {
+  color: var(--ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.evidenceValue {
+  overflow-wrap: anywhere;
+}
+
+.evidenceLink {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive — the ledger becomes a stack, keeping the same reading order
+-------------------------------------------------------------------------- */
+
+@media (max-width: 1100px) {
+  .grid {
+    grid-template-columns: 112px minmax(0, 1fr) 118px;
+    grid-template-areas:
+      "severity identity contribution"
+      ".        observed observed"
+      ".        explanation explanation"
+      ".        action action";
+  }
+
+  .observed {
+    padding-top: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .row,
+  .row[data-weight="strong"],
+  .row[data-weight="quiet"],
+  .row[data-weight="muted"] {
+    padding: 16px 0 16px 14px;
+  }
+
+  .grid {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "severity contribution"
+      "identity identity"
+      "observed observed"
+      "explanation explanation"
+      "action action";
+    row-gap: 9px;
+  }
+
+  .contribution {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .bar {
+    display: none;
+  }
+
+  .points {
+    font-size: 13px;
+  }
+
+  .pointsLabel {
+    margin-top: 0;
+  }
+
+  .row[data-weight="strong"] .name,
+  .name {
+    font-size: 15px;
+  }
+
+  .action {
+    text-align: left;
+  }
+
+  .panel {
+    margin-left: 0;
+    padding: 12px 13px;
+  }
+
+  .evidenceRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barFill,
+  [data-reveal="in"] .barFill {
+    transform: scaleX(var(--fill));
+    transition: none;
+  }
+
+  .chevron,
+  .row {
+    transition: none;
+  }
+}
+
+@media (scripting: none) {
+  .barFill {
+    transform: scaleX(var(--fill));
+  }
+}

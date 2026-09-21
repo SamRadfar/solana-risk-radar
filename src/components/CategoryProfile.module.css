@@ -1,0 +1,181 @@
+/**
+ * Risk profile — an open chart, not a widget.
+ *
+ * Rows are separated by space and a hairline rather than by being boxed, and
+ * the bar runs the full width of the column because nothing encloses it.
+ */
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 20px;
+  padding: 18px 0 20px;
+}
+
+.row + .row {
+  border-top: 1px solid var(--line);
+}
+
+.label {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.name {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.count {
+  font-size: 11px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.readout {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+/* The figure is the row's headline — this is where the section's weight sits. */
+.value {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.unit {
+  font-size: 15px;
+  margin-left: 2px;
+  opacity: 0.7;
+}
+
+.level {
+  font-size: 11px;
+  opacity: 0.9;
+}
+
+.absent {
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.track {
+  grid-column: 1 / -1;
+  position: relative;
+  margin-top: 14px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+
+.absentTrack {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.05) 0 6px,
+    transparent 6px 12px
+  );
+}
+
+/* Bars grow as the section arrives, one after the next. */
+[data-reveal="in"] .fill {
+  transform: scaleX(var(--fill));
+  transition: transform 900ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-reveal="in"] .row:nth-child(1) .fill {
+  transition-delay: 90ms;
+}
+[data-reveal="in"] .row:nth-child(2) .fill {
+  transition-delay: 165ms;
+}
+[data-reveal="in"] .row:nth-child(3) .fill {
+  transition-delay: 240ms;
+}
+[data-reveal="in"] .row:nth-child(4) .fill {
+  transition-delay: 315ms;
+}
+[data-reveal="in"] .row:nth-child(5) .fill {
+  transition-delay: 390ms;
+}
+
+.note {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  max-width: 76ch;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--ink-faint);
+}
+
+@media (max-width: 640px) {
+  .row {
+    padding: 14px 0 16px;
+  }
+
+  .name {
+    font-size: 14.5px;
+  }
+
+  .value {
+    font-size: 24px;
+  }
+
+  .level {
+    display: none;
+  }
+
+  .track {
+    height: 8px;
+    margin-top: 11px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill,
+  [data-reveal="in"] .fill {
+    transform: scaleX(var(--fill));
+    transition: none;
+    transition-delay: 0ms;
+  }
+}
+
+@media (scripting: none) {
+  .fill {
+    transform: scaleX(var(--fill));
+  }
+}
