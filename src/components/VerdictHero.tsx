@@ -171,12 +171,15 @@ export default function VerdictHero({ report }: { report: RiskReport }) {
                 {summary.topConcerns.map((concern, index) => {
                   const m = SEVERITY_META[concern.severity];
                   return (
-                    <li key={concern.id} className={styles.row}>
+                    <li key={concern.id} className={styles.entry}>
                       <span
                         aria-hidden="true"
-                        className={styles.tick}
-                        style={{ background: m.color }}
+                        className={styles.mark}
+                        style={{
+                          background: `linear-gradient(180deg, ${m.color}, ${m.color}33)`,
+                        }}
                       />
+
                       <span className={`tnum ${styles.rank}`}>
                         {String(index + 1).padStart(2, "0")}
                       </span>
@@ -189,14 +192,13 @@ export default function VerdictHero({ report }: { report: RiskReport }) {
                         >
                           {concern.observedValue}
                         </span>
-                      </span>
-
-                      {/* Colour, glyph and word together — severity is never hue alone. */}
-                      <span className={styles.severity} style={{ color: m.color }}>
-                        <span aria-hidden="true" className={styles.glyph}>
-                          {m.glyph}
+                        {/* Colour, glyph and word together — severity is never hue alone. */}
+                        <span className={styles.severity} style={{ color: m.color }}>
+                          <span aria-hidden="true" className={styles.glyph}>
+                            {m.glyph}
+                          </span>
+                          {m.label}
                         </span>
-                        {m.label}
                       </span>
                     </li>
                   );

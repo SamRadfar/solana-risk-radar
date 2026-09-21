@@ -1,14 +1,17 @@
 /**
- * The main-concerns ledger.
+ * The main-concerns stack.
  *
- * Three findings, ranked, as rows rather than as three rounded boxes. The
- * report already reads as a ledger further down the page and this is the same
- * idea at hero scale: a rank, what was found, what it measured, how severe it
- * is — separated by hairlines, with the severity carried by a short accent
- * rule and a labelled glyph rather than by a tinted card.
+ * Three findings, ranked, composed vertically. The previous version stacked
+ * them too, but each entry was a single wide band — rank at the far left,
+ * severity flung to the far right, a ruled line between — so the section read
+ * as a flattened strip rather than as three considered entries.
  *
- * Moving it into the left column is also what gives the chart its depth: the
- * grid row is as tall as this list, and the chart stretches to match.
+ * Now each concern is its own small vertical composition: name, then the
+ * figure that caused it, then how severe that is, set on a tight measure so
+ * the text never stretches toward the chart. A hairline spine runs down the
+ * rank gutter and ties the three together, and each entry carries a short
+ * severity rule on that spine — which is also the non-textual channel for the
+ * level, alongside the glyph and the word.
  */
 
 .ledger {
@@ -18,66 +21,101 @@
 }
 
 .list {
-  margin-top: 12px;
+  position: relative;
+  margin-top: 14px;
   list-style: none;
   padding: 0;
 }
 
-.row {
+/* The spine. Fades at both ends so it reads as structure, not a border. */
+.list::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 4px;
+  bottom: 4px;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(255, 255, 255, 0.09) 12%,
+    rgba(255, 255, 255, 0.09) 88%,
+    transparent 100%
+  );
+}
+
+.entry {
   position: relative;
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
-  align-items: baseline;
-  column-gap: 14px;
-  padding: 11px 0 11px 10px;
+  /* The gutter holds the rank only; the spine and its severity marks sit in
+     the first few pixels of it, clear of the numeral. */
+  grid-template-columns: 32px minmax(0, 1fr);
+  column-gap: 18px;
+  padding: 15px 0 16px;
   transition: background 0.2s ease;
 }
 
-.row + .row {
-  border-top: 1px solid var(--line);
+.entry + .entry::before {
+  content: "";
+  position: absolute;
+  left: 50px;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.07), transparent 78%);
 }
 
-.row:hover {
-  background: rgba(255, 255, 255, 0.016);
+.entry:hover {
+  background: rgba(255, 255, 255, 0.014);
 }
 
-/* The severity's non-textual channel: a short rule at the row's left edge. */
-.tick {
+/* The severity's segment of the spine. */
+.mark {
   position: absolute;
   left: 0;
-  top: 12px;
-  bottom: 12px;
-  width: 2px;
+  top: 19px;
+  width: 5px;
+  height: 22px;
   border-radius: 999px;
+  transition: height 0.25s ease;
+}
+
+.entry:hover .mark {
+  height: 30px;
 }
 
 .rank {
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--ink-faint);
+  grid-column: 1;
+  padding-top: 1px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  text-align: right;
+  color: rgba(255, 255, 255, 0.22);
 }
 
-/* Block children, so the measured value sits under the name rather than
-   running on from it. */
 .body {
-  display: block;
+  grid-column: 2;
   min-width: 0;
+  /* A tight measure: this is a column of entries, not a row of bands. */
+  max-width: 44ch;
 }
 
 .label {
   display: block;
-  font-size: 14.5px;
+  font-size: 15.5px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   line-height: 1.25;
   color: var(--ink);
 }
 
-/* The measured value, which is the reason the row exists. */
+/* The measured figure — the reason the entry exists, so it carries the colour. */
 .value {
   display: block;
-  margin-top: 3px;
-  font-size: 12.5px;
+  margin-top: 5px;
+  font-size: 13.5px;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -85,12 +123,13 @@
 .severity {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 10px;
+  gap: 6px;
+  margin-top: 9px;
+  font-size: 9.5px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  white-space: nowrap;
+  opacity: 0.85;
 }
 
 .glyph {
@@ -107,23 +146,39 @@
 }
 
 @media (max-width: 640px) {
-  .row {
+  .entry {
     grid-template-columns: 26px minmax(0, 1fr);
-    row-gap: 6px;
+    column-gap: 14px;
+    padding: 13px 0 14px;
   }
 
-  /* The severity moves under the value rather than off the edge. */
-  .severity {
-    grid-column: 2;
+  .list::before {
+    left: 1px;
+  }
+
+  .mark {
+    left: 0;
+    top: 17px;
+    width: 4px;
+    height: 18px;
+  }
+
+  .entry + .entry::before {
+    left: 40px;
+  }
+
+  .rank {
+    font-size: 15px;
   }
 
   .label {
-    font-size: 14px;
+    font-size: 14.5px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .row {
+  .entry,
+  .mark {
     transition: none;
   }
 }
