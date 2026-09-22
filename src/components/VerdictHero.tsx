@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 import type { RiskReport, Severity } from "@/lib/risk-engine/types";
 import {
   CLASSIFICATION_SUMMARY,
@@ -167,43 +169,53 @@ export default function VerdictHero({ report }: { report: RiskReport }) {
             <div className="eyebrow">Main concerns</div>
 
             {summary.topConcerns.length > 0 ? (
-              <ol className={styles.list}>
-                {summary.topConcerns.map((concern, index) => {
-                  const m = SEVERITY_META[concern.severity];
-                  return (
-                    <li key={concern.id} className={styles.entry}>
-                      <span
-                        aria-hidden="true"
-                        className={styles.mark}
-                        style={{
-                          background: `linear-gradient(180deg, ${m.color}, ${m.color}33)`,
-                        }}
-                      />
+              <div
+                className={styles.rail}
+                /* One lane per concern — the data decides the column count. */
+                style={{ "--columns": summary.topConcerns.length } as CSSProperties}
+              >
+                <div className={styles.line} aria-hidden="true" />
 
-                      <span className={`tnum ${styles.rank}`}>
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-
-                      <span className={styles.body}>
-                        <span className={styles.label}>{concern.label}</span>
-                        <span
-                          className={`font-mono ${styles.value}`}
-                          style={{ color: m.color }}
-                        >
-                          {concern.observedValue}
+                <ol className={styles.lanes}>
+                  {summary.topConcerns.map((concern, index) => {
+                    const m = SEVERITY_META[concern.severity];
+                    const number = String(index + 1).padStart(2, "0");
+                    return (
+                      <li
+                        key={concern.id}
+                        className={styles.lane}
+                        tabIndex={0}
+                        style={
+                          {
+                            "--tone": m.color,
+                            "--tone-soft": m.soft,
+                            "--tone-glow": m.glow,
+                            // The watermark's lit state: the same hue, barely there.
+                            "--tone-ghost": `${m.color}17`,
+                          } as CSSProperties
+                        }
+                      >
+                        <span className={styles.ghost} aria-hidden="true">
+                          {number}
                         </span>
+                        <span className={styles.node} aria-hidden="true" />
+
+                        <span className={`tnum ${styles.index}`}>{number}</span>
+                        <h4 className={styles.title}>{concern.label}</h4>
+                        <p className={`font-mono ${styles.value}`}>{concern.observedValue}</p>
+
                         {/* Colour, glyph and word together — severity is never hue alone. */}
-                        <span className={styles.severity} style={{ color: m.color }}>
+                        <p className={styles.severity}>
                           <span aria-hidden="true" className={styles.glyph}>
                             {m.glyph}
                           </span>
                           {m.label}
-                        </span>
-                      </span>
-                    </li>
-                  );
-                })}
-              </ol>
+                        </p>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
             ) : (
               <p className={styles.clean}>
                 No signal was flagged at any severity. This is not a safety guarantee — it
