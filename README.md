@@ -17,7 +17,13 @@ identical score.
 > **Not financial advice.** This tool reports verifiable risk factors. It never
 > claims a token is "safe" or a "scam".
 
-![Solana Risk Radar analysing BONK](docs/hero.png)
+<p align="center">
+  <img
+    src="docs/screenshots/desktop/desktop-02-result-overview.png"
+    alt="Solana Risk Radar desktop result overview — risk score, verdict, main concerns and 4H market context"
+    width="100%"
+  >
+</p>
 
 ---
 
@@ -98,6 +104,33 @@ These all need a running server; pass a URL to target another one
 
 Full detail: [`ARCHITECTURE.md`](ARCHITECTURE.md) ·
 [`METHODOLOGY.md`](METHODOLOGY.md) · [`DEMO.md`](DEMO.md)
+
+---
+
+## Product Preview
+
+The same report on desktop and at phone width. Holder rows are classified from
+on-chain facts rather than ranked by size alone, and the score, verdict and
+category breakdown stay readable on mobile.
+
+<table>
+  <tr>
+    <td width="78%" valign="top">
+      <img
+        src="docs/screenshots/desktop/desktop-04-holders.png"
+        alt="Holder distribution on desktop, each account classified as wallet, exchange or program vault"
+        width="100%"
+      >
+    </td>
+    <td width="22%" valign="top">
+      <img
+        src="docs/screenshots/mobile/mobile-02-result-overview.png"
+        alt="Solana Risk Radar result overview on mobile"
+        width="100%"
+      >
+    </td>
+  </tr>
+</table>
 
 ---
 
