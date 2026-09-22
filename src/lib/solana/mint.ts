@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getAccountInfoParsed } from "./rpc";
+import { toUiAmount } from "./amounts";
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "./knownAddresses";
 
 /**
@@ -55,20 +56,13 @@ export class AccountNotFoundError extends Error {
   }
 }
 
+export { toUiAmount };
+
 export class NotAMintError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "NotAMintError";
   }
-}
-
-/** Convert a base-unit amount string to whole tokens without precision loss. */
-export function toUiAmount(rawAmount: string, decimals: number): number {
-  if (decimals === 0) return Number(rawAmount);
-  const padded = rawAmount.padStart(decimals + 1, "0");
-  const whole = padded.slice(0, padded.length - decimals);
-  const fraction = padded.slice(padded.length - decimals);
-  return Number(`${whole}.${fraction}`);
 }
 
 export async function getMintInfo(address: string): Promise<MintInfo> {

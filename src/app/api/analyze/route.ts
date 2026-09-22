@@ -10,7 +10,12 @@ import { getOnChainMetadata } from "@/lib/solana/metadata";
 import { getHolderData } from "@/lib/solana/holders";
 import { getTokenAge } from "@/lib/solana/age";
 import { hasPrivateEndpoint } from "@/lib/solana/rpc";
-import { getMarketData, marketCap, spotPrice } from "@/lib/providers/dexscreener";
+import {
+  getMarketData,
+  marketCap,
+  marketIdentity,
+  spotPrice,
+} from "@/lib/providers/dexscreener";
 import { buildRiskReport } from "@/lib/risk-engine/engine";
 import { getCached, setCached } from "@/lib/cache";
 import type {
@@ -89,6 +94,12 @@ export async function GET(request: NextRequest) {
     getMarketData(mintAddress),
   ]);
 
+  /*
+   * Listing metadata is taken from a market the consensus accepted, so the
+   * links shown belong to the same evidence the price does.
+   */
+  const identity = marketIdentity(marketData);
+
   const overview: TokenOverview = {
     mint: mintAddress,
     // On-chain metadata is authoritative for identity; the market aggregator is
@@ -100,12 +111,15 @@ export async function GET(request: NextRequest) {
     supplyUi: mintInfo.supplyUi,
     supplyIsMeaningful: mintInfo.supplyIsMeaningful,
     priceUsd: spotPrice(marketData),
-    marketCapUsd: marketCap(marketData),
-    imageUrl: marketData.imageUrl,
+    marketCapUsd: marketCap(
+      marketData,
+      mintInfo.supplyIsMeaningful ? mintInfo.supplyUi : undefined,
+    ),
+    imageUrl: identity.imageUrl,
     tokenProgram: mintInfo.tokenProgram,
     metadataSource: metadata.source,
-    websites: marketData.websites,
-    socials: marketData.socials,
+    websites: identity.websites,
+    socials: identity.socials,
   };
 
   const sources: DataSourceStatus[] = [

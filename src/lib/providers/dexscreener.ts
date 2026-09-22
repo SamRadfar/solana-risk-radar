@@ -7,7 +7,14 @@
  * aggregator (GeckoTerminal, Birdeye, Jupiter) without touching the risk
  * engine: rules depend only on `MarketData`, never on DexScreener's wire
  * format.
+ *
+ * Raw pool rows never reach the rules directly: everything below the fetch is
+ * derived from `marketConsensus`, which validates, weights and reconciles the
+ * pools before any figure is taken from them.
  */
+
+import { buildConsensus, type MarketConsensus } from "../market/consensus";
+
 
 export interface MarketPair {
   dexId: string;
@@ -25,6 +32,12 @@ export interface MarketPair {
   buys24h: number;
   sells24h: number;
   url: string | null;
+  /**
+   * Listing metadata submitted by whoever created this pool. Per-pair on
+   * purpose: it is the pool's claim about the token, not the token's own
+   * record, so it must be attributable to a market the consensus accepted.
+   */
+  info: { imageUrl: string | null; websites: string[]; socials: string[] };
 }
 
 export interface MarketData {
@@ -45,6 +58,7 @@ interface DexScreenerToken {
 }
 
 interface DexScreenerPair {
+  chainId?: string;
   dexId?: string;
   pairAddress?: string;
   url?: string;
@@ -109,7 +123,12 @@ export async function getMarketData(mintAddress: string): Promise<MarketData> {
     }
 
     const json = (await response.json()) as DexScreenerResponse;
-    const rawPairs = Array.isArray(json.pairs) ? json.pairs : [];
+    // The endpoint is address-keyed, not chain-keyed. Solana addresses cannot
+    // collide with EVM ones in practice, but reading a pair from another chain
+    // as if it were this mint's market is not a failure worth risking.
+    const rawPairs = (Array.isArray(json.pairs) ? json.pairs : []).filter(
+      (pair) => pair?.chainId === undefined || pair.chainId === "solana",
+    );
 
     // "No pools" is a successful answer, and a meaningful risk signal itself.
     if (rawPairs.length === 0) return EMPTY({ available: true });
@@ -143,6 +162,12 @@ export async function getMarketData(mintAddress: string): Promise<MarketData> {
         buys24h: num(pair.txns?.h24?.buys) ?? 0,
         sells24h: num(pair.txns?.h24?.sells) ?? 0,
         url: pair.url ?? null,
+        info: {
+          // Only meaningful when this pair actually prices the analysed mint.
+          imageUrl: mintIsBase ? (pair.info?.imageUrl ?? null) : null,
+          websites: mintIsBase ? collectUrls(pair.info?.websites) : [],
+          socials: mintIsBase ? collectUrls(pair.info?.socials) : [],
+        },
       };
     });
 
@@ -196,76 +221,146 @@ function collectUrls(entries: { url?: string }[] | undefined): string[] {
 // Aggregates shared by several rules, so each computes them the same way.
 // ---------------------------------------------------------------------------
 
+/*
+ * Every aggregate below is derived from the market *consensus*, not from raw
+ * pool rows. The rules and the UI call these exactly as before; what changed
+ * is that outliers, duplicates, dust pools and markets for other assets no
+ * longer reach them.
+ *
+ * The consensus is memoised per payload: it is a pure function of the data,
+ * several rules ask for it during one analysis, and recomputing it each time
+ * would be wasted work — never stale, because a new fetch is a new object.
+ */
+const consensusCache = new WeakMap<MarketData, MarketConsensus>();
+
+export function marketConsensus(market: MarketData): MarketConsensus {
+  const cached = consensusCache.get(market);
+  if (cached) return cached;
+  const consensus = buildConsensus(market);
+  consensusCache.set(market, consensus);
+  return consensus;
+}
+
+/** Liquidity across the markets that survived validation. */
 export function totalLiquidity(market: MarketData): number {
-  return market.pairs.reduce((sum, pair) => sum + pair.liquidityUsd, 0);
+  return marketConsensus(market).liquidityUsd ?? 0;
 }
 
+/** 24h volume across the markets that survived validation. */
 export function totalVolume24h(market: MarketData): number {
-  return market.pairs.reduce((sum, pair) => sum + pair.volume24hUsd, 0);
+  return marketConsensus(market).volume24hUsd ?? 0;
 }
 
-/** Deepest pool first. */
+/** Accepted pools, deepest first. Rejected markets never appear. */
 export function pairsByLiquidity(market: MarketData): MarketPair[] {
-  return [...market.pairs].sort((a, b) => b.liquidityUsd - a.liquidityUsd);
-}
-
-/** Best available market capitalisation, preferring circulating over fully diluted. */
-export function marketCap(market: MarketData): number | null {
-  for (const pair of pairsByLiquidity(market)) {
-    if (pair.marketCap !== null && pair.marketCap > 0) return pair.marketCap;
-    if (pair.fdv !== null && pair.fdv > 0) return pair.fdv;
-  }
-  return null;
+  const accepted = new Set(
+    marketConsensus(market)
+      .observations.filter((o) => o.accepted)
+      .map((o) => o.pairAddress),
+  );
+  return [...market.pairs]
+    .filter((pair) => accepted.has(pair.pairAddress))
+    .sort((a, b) => b.liquidityUsd - a.liquidityUsd);
 }
 
 /**
- * The pool the canonical price is read from.
+ * The deepest pool inside the accepted consensus cluster.
  *
- * Exactly the pool `spotPrice` selects, exposed so that anything needing to
- * name that market — price history, a link out to it — reads the same one
- * rather than forming a second opinion about which market counts.
+ * This is the pool the price history is read from, so it has to be one the
+ * consensus vouches for — reading history from a rejected market is how a
+ * chart ends somewhere the stated price is not.
  */
 export function canonicalPair(market: MarketData): MarketPair | null {
-  return pairsByLiquidity(market).find((pair) => pair.priceUsd !== null) ?? null;
+  const pool = marketConsensus(market).canonicalPool;
+  if (!pool) return null;
+  return market.pairs.find((pair) => pair.pairAddress === pool.pairAddress) ?? null;
 }
 
-/** Spot price from the deepest pool that reports one. */
+/**
+ * Listing metadata from the deepest market the consensus accepted.
+ *
+ * Links and the logo are submitted per pool rather than published by the
+ * token, so taking them from whichever pool happens to be deepest means an
+ * outlier — the very market rejected as describing something else — can decide
+ * which website the report points at. Reading them from an accepted market
+ * ties them to the same evidence the price came from.
+ */
+export function marketIdentity(market: MarketData): {
+  imageUrl: string | null;
+  websites: string[];
+  socials: string[];
+} {
+  const accepted = pairsByLiquidity(market);
+  const withInfo =
+    accepted.find(
+      (pair) =>
+        pair.info.imageUrl !== null ||
+        pair.info.websites.length > 0 ||
+        pair.info.socials.length > 0,
+    ) ?? null;
+
+  return withInfo
+    ? withInfo.info
+    : { imageUrl: null, websites: [], socials: [] };
+}
+
+/** The consensus price. Null when no market could be trusted. */
 export function spotPrice(market: MarketData): number | null {
-  return pairsByLiquidity(market).find((pair) => pair.priceUsd !== null)?.priceUsd ?? null;
+  return marketConsensus(market).priceUsd;
 }
 
-/**
- * 24h price change from the deepest pool that reports one.
- *
- * Deliberately the same selection rule as `spotPrice`, so the change shown
- * beside a price is the change belonging to that price rather than to some
- * other pool.
- */
+/** Weighted-median 24h change across accepted markets. */
 export function priceChange24h(market: MarketData): number | null {
-  return (
-    pairsByLiquidity(market).find((pair) => pair.priceChange24h !== null)?.priceChange24h ??
-    null
-  );
+  return marketConsensus(market).priceChange24hPercent;
 }
 
 /**
- * Fully diluted valuation from the same pool `marketCap` took its figure from.
+ * Market capitalisation: the consensus price times the circulating supply the
+ * accepted markets imply.
  *
- * Locking onto that pool matters: searching independently for the deepest pool
- * that happens to report an FDV can land on a different pool and produce a
- * pair of figures that contradict each other — USDC reported a $60.9B market
- * cap beside a $9.3B "fully diluted" valuation, which is impossible. Reading
- * both from one pool means the two are always talking about the same market.
- *
- * Returns null when that pool reports no FDV, rather than borrowing one from
- * somewhere else.
+ * Built from the canonical price rather than read from a pool, so the cap can
+ * never describe a different price than the one on screen. Returns null when
+ * no accepted market reports a capitalisation — a fully diluted figure is a
+ * different measurement and is never substituted for this one.
  */
-export function fullyDilutedValuation(market: MarketData): number | null {
-  for (const pair of pairsByLiquidity(market)) {
-    const hasMarketCap = pair.marketCap !== null && pair.marketCap > 0;
-    const hasFdv = pair.fdv !== null && pair.fdv > 0;
-    // The first pool with either figure is the one `marketCap` selects.
-    if (hasMarketCap || hasFdv) return hasFdv ? pair.fdv : null;
+export function marketCap(market: MarketData, totalSupplyUi?: number): number | null {
+  const consensus = marketConsensus(market);
+  if (consensus.priceUsd === null || consensus.impliedCirculating === null) return null;
+
+  /*
+   * Circulating supply cannot exceed the supply that exists. When the mint's
+   * own total is known, an implied circulating above it means the provider's
+   * capitalisation describes a different token or a different unit — so the
+   * figure is withheld rather than printed. The 2% allowance absorbs the gap
+   * between the provider's snapshot and the current on-chain supply.
+   */
+  if (
+    typeof totalSupplyUi === "number" &&
+    Number.isFinite(totalSupplyUi) &&
+    totalSupplyUi > 0 &&
+    consensus.impliedCirculating > totalSupplyUi * 1.02
+  ) {
+    return null;
   }
-  return null;
+
+  const cap = consensus.priceUsd * consensus.impliedCirculating;
+  return Number.isFinite(cap) && cap > 0 ? cap : null;
+}
+
+/**
+ * Fully diluted valuation: the consensus price times the mint's own total
+ * supply, read on chain.
+ *
+ * Deliberately not the provider's `fdv` field — this way both valuations are
+ * computed here, from the same price, against supplies whose provenance is
+ * known.
+ */
+export function fullyDilutedValuation(
+  market: MarketData,
+  totalSupplyUi: number,
+): number | null {
+  const price = marketConsensus(market).priceUsd;
+  if (price === null || !Number.isFinite(totalSupplyUi) || totalSupplyUi <= 0) return null;
+  const fdv = price * totalSupplyUi;
+  return Number.isFinite(fdv) && fdv > 0 ? fdv : null;
 }

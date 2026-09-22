@@ -1,3 +1,5 @@
+import { marketConsensus } from "../providers/dexscreener";
+
 import {
   canonicalPair,
   fullyDilutedValuation,
@@ -7,6 +9,7 @@ import {
 } from "../providers/dexscreener";
 
 import type { AnalysisInput, RiskRule } from "./input";
+import type { MarketDiagnostics } from "./types";
 import {
   RISK_CATEGORIES,
   type CategoryScore,
@@ -421,15 +424,69 @@ export function buildRiskReport(
       priceUsd: overview.priceUsd,
       priceChange24hPercent: priceChange24h(input.marketData),
       marketCapUsd: overview.marketCapUsd,
-      fullyDilutedUsd: fullyDilutedValuation(input.marketData),
+      fullyDilutedUsd: input.mintInfo.supplyIsMeaningful
+        ? fullyDilutedValuation(input.marketData, input.mintInfo.supplyUi)
+        : null,
       liquidityUsd: input.marketData.available ? totalLiquidity(input.marketData) : null,
       volume24hUsd: input.marketData.available ? totalVolume24h(input.marketData) : null,
       poolCount: input.marketData.pairs.length,
       poolAddress: canonicalPair(input.marketData)?.pairAddress ?? null,
       poolDex: canonicalPair(input.marketData)?.dexId ?? null,
     },
+    diagnostics: buildDiagnostics(input, overview),
     generatedAt: new Date().toISOString(),
     elapsedMs,
     warnings,
+  };
+}
+
+/**
+ * The provenance record for a report's market figures.
+ *
+ * Built from the same consensus object every displayed figure came from, so
+ * the two can never drift apart: if the report shows a price, this says which
+ * pools voted for it, which were rejected and why.
+ */
+function buildDiagnostics(
+  input: AnalysisInput,
+  overview: TokenOverview,
+): MarketDiagnostics {
+  const consensus = marketConsensus(input.marketData);
+  const supplyUi = input.mintInfo.supplyIsMeaningful ? input.mintInfo.supplyUi : 0;
+
+  return {
+    method: consensus.method,
+    confidence: consensus.confidence,
+    consideredPools: consensus.consideredCount,
+    acceptedPools: consensus.acceptedCount,
+    rejectedPools: consensus.rejectedCount,
+    dispersion: consensus.dispersion,
+    liquidityShare: consensus.liquidityShare,
+    canonicalPriceUsd: consensus.priceUsd,
+    marketCapInputs:
+      overview.marketCapUsd !== null &&
+      consensus.priceUsd !== null &&
+      consensus.impliedCirculating !== null
+        ? { priceUsd: consensus.priceUsd, circulatingSupply: consensus.impliedCirculating }
+        : null,
+    fullyDilutedInputs:
+      consensus.priceUsd !== null && supplyUi > 0
+        ? { priceUsd: consensus.priceUsd, totalSupply: supplyUi }
+        : null,
+    supplySource: "mint account (on chain)",
+    totalSupplyUi: supplyUi,
+    historyPool: consensus.canonicalPool?.pairAddress ?? null,
+    pools: consensus.observations.map((observation) => ({
+      dexId: observation.dexId,
+      pairAddress: observation.pairAddress,
+      quoteSymbol: observation.quoteSymbol,
+      priceUsd: observation.priceUsd,
+      liquidityUsd: observation.liquidityUsd,
+      volume24hUsd: observation.volume24hUsd,
+      weight: observation.weight,
+      accepted: observation.accepted,
+      ...(observation.rejection ? { rejection: observation.rejection } : {}),
+      ...(observation.deviation !== undefined ? { deviation: observation.deviation } : {}),
+    })),
   };
 }

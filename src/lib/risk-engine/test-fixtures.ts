@@ -14,12 +14,20 @@ import type { AnalysisInput } from "./input";
 
 export const DAY = 24 * 60 * 60 * 1000;
 
+/*
+ * Distinct by default. Real pools have distinct addresses, and the market
+ * consensus de-duplicates on that address — a fixture that reused one would
+ * silently model a single pool while claiming to model several.
+ */
+let pairSequence = 0;
+
 export function pair(
   overrides: Record<string, unknown> = {},
 ): AnalysisInput["marketData"]["pairs"][number] {
+  pairSequence += 1;
   return {
     dexId: "raydium",
-    pairAddress: "pair",
+    pairAddress: `pair-${pairSequence}`,
     quoteSymbol: "SOL",
     liquidityUsd: 1_000_000,
     volume24hUsd: 200_000,
@@ -31,6 +39,7 @@ export function pair(
     buys24h: 500,
     sells24h: 480,
     url: null,
+    info: { imageUrl: null, websites: [], socials: [] },
     ...overrides,
   } as AnalysisInput["marketData"]["pairs"][number];
 }
@@ -43,8 +52,15 @@ export function makeInput(overrides: Partial<AnalysisInput> = {}): AnalysisInput
       tokenProgram: "spl-token",
       programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
       decimals: 9,
-      supplyRaw: "1000000000000000",
-      supplyUi: 1_000_000,
+      /*
+       * Deliberately large. Market capitalisation is validated against the
+       * supply that exists on chain — circulating cannot exceed it — so a
+       * small default here would silently withhold the cap in every fixture
+       * that models a mid- or mega-cap token. Tests that care about that
+       * validation set their own supply; see the supply-ceiling test.
+       */
+      supplyRaw: "1000000000000000000000",
+      supplyUi: 1_000_000_000_000,
       supplyIsMeaningful: true,
       mintAuthority: null,
       freezeAuthority: null,

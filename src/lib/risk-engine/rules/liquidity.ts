@@ -146,13 +146,15 @@ export function liquidityDepthRule({ marketData }: AnalysisInput): RiskSignal {
  * token and dangerously thin for a $500M one. This ratio is what determines
  * whether the market could actually absorb holders trying to exit.
  */
-export function liquidityRatioRule({ marketData }: AnalysisInput): RiskSignal {
+export function liquidityRatioRule({ marketData, mintInfo }: AnalysisInput): RiskSignal {
   const ID = "liquidity-ratio";
   const LABEL = "Liquidity vs Market Cap";
   const METRIC = "Liquidity as a share of market capitalisation";
   const MAX_POINTS = 10;
 
-  const cap = marketData.available ? marketCap(marketData) : null;
+  const cap = marketData.available
+    ? marketCap(marketData, mintInfo.supplyIsMeaningful ? mintInfo.supplyUi : undefined)
+    : null;
   const liquidity = marketData.available ? totalLiquidity(marketData) : 0;
 
   if (!marketData.available || cap === null || cap <= 0) {

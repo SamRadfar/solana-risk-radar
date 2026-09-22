@@ -177,6 +177,45 @@ export interface MarketSnapshot {
   poolDex: string | null;
 }
 
+/**
+ * Why every market figure in the report is what it is.
+ *
+ * Carried on the response but never rendered: it exists so that a wrong number
+ * can be traced to the pool that produced it and the rule that admitted or
+ * rejected it, without re-running the analysis by hand.
+ */
+export interface MarketDiagnostics {
+  method: string;
+  confidence: "high" | "medium" | "low" | "none";
+  consideredPools: number;
+  acceptedPools: number;
+  rejectedPools: number;
+  /** Liquidity-weighted mean relative deviation across accepted markets. */
+  dispersion: number | null;
+  /** Share of priced liquidity standing behind the accepted cluster. */
+  liquidityShare: number | null;
+  canonicalPriceUsd: number | null;
+  /** The inputs each valuation was built from, stated separately. */
+  marketCapInputs: { priceUsd: number; circulatingSupply: number } | null;
+  fullyDilutedInputs: { priceUsd: number; totalSupply: number } | null;
+  supplySource: string;
+  totalSupplyUi: number;
+  /** The pool the 4h history is read from; always an accepted one. */
+  historyPool: string | null;
+  pools: {
+    dexId: string;
+    pairAddress: string | null;
+    quoteSymbol: string | null;
+    priceUsd: number;
+    liquidityUsd: number;
+    volume24hUsd: number;
+    weight: number;
+    accepted: boolean;
+    rejection?: string;
+    deviation?: number;
+  }[];
+}
+
 export interface DataSourceStatus {
   name: string;
   detail: string;
@@ -199,6 +238,8 @@ export interface RiskReport {
   sources: DataSourceStatus[];
   /** Market figures for display. Never an input to the score. */
   market: MarketSnapshot;
+  /** How those figures were established. Developer-facing, never rendered. */
+  diagnostics: MarketDiagnostics;
   generatedAt: string;
   elapsedMs: number;
   warnings: string[];
