@@ -4,10 +4,16 @@
  * readout. No axes furniture, no controls, no indicators.
  */
 
+/*
+ * Height is 88% of the grid row rather than all of it: the panel read as
+ * vertically stretched when it matched the analysis column exactly. An
+ * explicit height also overrides the grid's stretch, so the space it gives
+ * back sits below the panel rather than being redistributed.
+ */
 .panel {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: 88%;
   padding: 14px 16px 12px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);

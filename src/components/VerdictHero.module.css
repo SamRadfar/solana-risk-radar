@@ -1,21 +1,20 @@
 /**
- * Main concerns — the landing page's signal-lane system, applied to findings.
+ * Main concerns — side-by-side columns, in a technical register.
  *
- * Same idea as "What gets checked": one shared signal line, a node per column
- * sitting on it, dividers only *between* columns, oversized watermark numerals
- * behind, and no card fill or enclosing frame anywhere. What changes is the
- * tone — each lane is coloured by its own severity rather than by the product
- * accent, because here the columns are findings rather than categories.
+ * Deliberately not the landing page's signal lanes. That section introduces a
+ * product to someone who has not used it, and its language is expressive: a
+ * long connecting line, nodes riding it, oversized watermark numerals. This is
+ * the report's headline findings, read by someone who already knows what they
+ * are looking at, so it is drawn like an instrument readout instead — no
+ * connecting line, no nodes, no watermarks, and a different vertical rhythm.
  *
- * The column count is the number of concerns, passed in as `--columns`, so a
- * report with two findings gets two lanes and one with four gets four.
+ * What each column has instead is a severity rail down its left edge, a small
+ * mono index, and the measured figure set as the largest thing in the column
+ * with its qualifier beneath in quiet type. The figure is what a reader came
+ * for; the rest is there to explain it.
  *
- * The rail is a container, not a viewport consumer: this block lives in the
- * hero's left column, whose width does not track the viewport (it is 60% of
- * the card above 1024px and the full card below it). A container query is the
- * only thing that can ask the question that actually matters here — how much
- * room do *I* have — and the narrow layout is the default, so a browser
- * without support still gets the rotated rail rather than crushed columns.
+ * Nothing is boxed. The columns sit directly on the hero surface, separated by
+ * a hairline in the gutter between them.
  */
 
 .ledger {
@@ -25,29 +24,11 @@
 }
 
 .rail {
-  position: relative;
   container-type: inline-size;
-  margin-top: 16px;
-}
-
-/* The shared signal line. A left rail when stacked, horizontal when columned. */
-.line {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: linear-gradient(
-    to bottom,
-    transparent 0%,
-    rgba(255, 255, 255, 0.14) 6%,
-    rgba(255, 255, 255, 0.08) 60%,
-    transparent 100%
-  );
+  margin-top: 18px;
 }
 
 .lanes {
-  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   list-style: none;
@@ -57,32 +38,39 @@
 
 .lane {
   position: relative;
-  padding: 14px 0 14px 22px;
+  padding: 4px 0 16px 15px;
   isolation: isolate;
-  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Dividers between lanes only, fading out so they read as structure rather
-   than as the sides of a box. */
-.lane + .lane::before {
+/* The severity rail: the column's left edge, in its own level's colour. */
+.lane::before {
   content: "";
   position: absolute;
-  left: 22px;
-  right: 0;
-  top: 0;
-  height: 1px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.09), transparent 76%);
+  left: 0;
+  top: 2px;
+  bottom: 12px;
+  width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--tone) 0%, var(--tone) 34%, transparent 100%);
+  opacity: 0.85;
+  transition: opacity 0.3s ease;
 }
 
-/* The illumination under the hovered lane, in that lane's own severity. */
+.lane:hover::before,
+.lane:focus-within::before {
+  opacity: 1;
+}
+
+/* A wash that lifts the hovered column off the surface, without a border. */
 .lane::after {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: -4px -8px -4px -6px;
   z-index: -1;
+  border-radius: 6px;
   opacity: 0;
-  background: linear-gradient(to bottom, var(--tone-soft) 0%, transparent 74%);
-  transition: opacity 0.4s ease;
+  background: linear-gradient(180deg, var(--tone-soft) 0%, transparent 72%);
+  transition: opacity 0.3s ease;
 }
 
 .lane:hover::after,
@@ -90,90 +78,52 @@
   opacity: 1;
 }
 
-/* Node on the signal line, lit by severity. */
-.node {
-  position: absolute;
-  top: 20px;
-  left: -3px;
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--canvas);
-  border: 1px solid var(--tone);
-  transition:
-    background 0.35s ease,
-    box-shadow 0.35s ease;
-}
-
-.lane:hover .node,
-.lane:focus-within .node {
-  background: var(--tone);
-  box-shadow: 0 0 12px var(--tone-glow);
-}
-
-/* Oversized watermark numeral. */
-.ghost {
-  position: absolute;
-  right: 6px;
-  top: 4px;
-  z-index: -1;
-  font-size: 52px;
-  font-weight: 600;
-  letter-spacing: -0.04em;
-  line-height: 1;
-  color: rgba(255, 255, 255, 0.03);
-  user-select: none;
-  transition: color 0.4s ease;
-}
-
-.lane:hover .ghost,
-.lane:focus-within .ghost {
-  color: var(--tone-ghost);
-}
-
 .index {
   display: block;
   font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10.5px;
-  letter-spacing: 0.14em;
+  font-size: 10px;
+  letter-spacing: 0.18em;
   color: var(--ink-faint);
-  transition: color 0.35s ease;
-}
-
-.lane:hover .index,
-.lane:focus-within .index {
-  color: var(--tone);
 }
 
 .title {
-  margin-top: 9px;
-  font-size: 15px;
+  margin-top: 7px;
+  font-size: 13.5px;
   font-weight: 600;
-  letter-spacing: -0.015em;
-  line-height: 1.25;
-  color: var(--ink);
+  letter-spacing: -0.005em;
+  line-height: 1.3;
+  color: var(--ink-secondary);
 }
 
-/* The measured figure — the reason the lane exists, so it carries the tone. */
-.value {
-  margin-top: 6px;
-  font-size: 13px;
-  line-height: 1.45;
+/* The measurement, set as the column's headline. */
+.figure {
+  margin-top: 14px;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
   color: var(--tone);
   overflow-wrap: anywhere;
+}
+
+.qualifier {
+  margin-top: 5px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-muted);
 }
 
 .severity {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-top: 10px;
+  margin-top: 14px;
   font-size: 9.5px;
   font-weight: 600;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--tone);
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 .glyph {
@@ -190,87 +140,67 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Once the block itself is wide enough, the instrument rotates: the rail
-   becomes a horizontal signal line and each concern takes its own column.
+   Side by side once the block itself has room. Container-based, because this
+   sits in the hero's left column, whose width does not track the viewport —
+   it is 60% of the card above 1024px and the whole card below it.
 --------------------------------------------------------------------------- */
 
-@container (min-width: 560px) {
-  .line {
-    left: 0;
-    right: 0;
-    top: 0;
-    bottom: auto;
-    width: auto;
-    height: 1px;
-    background: linear-gradient(
-      90deg,
-      transparent 0%,
-      rgba(255, 255, 255, 0.14) 6%,
-      rgba(255, 255, 255, 0.1) 50%,
-      rgba(255, 255, 255, 0.08) 94%,
-      transparent 100%
-    );
-  }
-
+@container (min-width: 520px) {
   /* One column per concern. */
   .lanes {
     grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
+    column-gap: 30px;
   }
 
   .lane {
-    padding: 24px 16px 6px 18px;
+    padding: 4px 0 4px 15px;
+  }
+
+  /* The only line between columns: a hairline in the gutter, kept faint so
+     the severity rails stay the stronger vertical. */
+  .lane + .lane {
+    border-left: 1px solid rgba(255, 255, 255, 0.055);
+    margin-left: -15px;
+    padding-left: 30px;
   }
 
   .lane + .lane::before {
-    left: 0;
-    right: auto;
-    top: 10px;
-    bottom: 10px;
-    width: 1px;
-    height: auto;
-    background: linear-gradient(
-      to bottom,
-      rgba(255, 255, 255, 0.11) 0%,
-      rgba(255, 255, 255, 0.05) 55%,
-      transparent 100%
-    );
-  }
-
-  .node {
-    top: -3px;
-    left: 18px;
-  }
-
-  .ghost {
-    right: 10px;
-    top: 6px;
-    font-size: 58px;
+    left: 15px;
   }
 
   /*
-   * Two lines of headroom for every title, whether or not it needs them. The
-   * lanes are independent grid items, so a title that wraps in one column
-   * would otherwise push its value and severity out of line with the columns
-   * beside it — and the values reading across at one level is most of what
-   * makes this a row of lanes rather than three unrelated stacks.
+   * Two lines of headroom for the title and the qualifier, whether or not
+   * they are needed. The lanes are independent grid items, so a wrap in one
+   * column would drop everything below it out of line with its neighbours —
+   * and the figures reading across at one level is most of what makes this a
+   * row of columns rather than three unrelated stacks.
    */
   .title {
-    min-height: 2.5em;
+    min-height: 2.6em;
   }
 
-  /* The same reasoning one row down: a figure that wraps must not drop its
-     own severity below the others. */
-  .value {
+  .qualifier {
     min-height: 2.9em;
   }
 }
 
+/* Narrow: the columns become stacked entries, each keeping its severity rail. */
+@container (max-width: 519px) {
+  .lane + .lane {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+
+  .figure {
+    margin-top: 10px;
+    font-size: 22px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .lane,
-  .lane::after,
-  .node,
-  .ghost,
-  .index {
+  .lane::before,
+  .lane::after {
     transition: none;
   }
 }

@@ -171,15 +171,13 @@ export default function VerdictHero({ report }: { report: RiskReport }) {
             {summary.topConcerns.length > 0 ? (
               <div
                 className={styles.rail}
-                /* One lane per concern — the data decides the column count. */
+                /* One column per concern — the data decides the column count. */
                 style={{ "--columns": summary.topConcerns.length } as CSSProperties}
               >
-                <div className={styles.line} aria-hidden="true" />
-
                 <ol className={styles.lanes}>
                   {summary.topConcerns.map((concern, index) => {
                     const m = SEVERITY_META[concern.severity];
-                    const number = String(index + 1).padStart(2, "0");
+                    const { figure, qualifier } = splitMeasurement(concern.observedValue);
                     return (
                       <li
                         key={concern.id}
@@ -189,20 +187,16 @@ export default function VerdictHero({ report }: { report: RiskReport }) {
                           {
                             "--tone": m.color,
                             "--tone-soft": m.soft,
-                            "--tone-glow": m.glow,
-                            // The watermark's lit state: the same hue, barely there.
-                            "--tone-ghost": `${m.color}17`,
                           } as CSSProperties
                         }
                       >
-                        <span className={styles.ghost} aria-hidden="true">
-                          {number}
+                        <span className={`tnum ${styles.index}`}>
+                          {String(index + 1).padStart(2, "0")}
                         </span>
-                        <span className={styles.node} aria-hidden="true" />
-
-                        <span className={`tnum ${styles.index}`}>{number}</span>
                         <h4 className={styles.title}>{concern.label}</h4>
-                        <p className={`font-mono ${styles.value}`}>{concern.observedValue}</p>
+
+                        <p className={`tnum ${styles.figure}`}>{figure}</p>
+                        {qualifier && <p className={styles.qualifier}>{qualifier}</p>}
 
                         {/* Colour, glyph and word together — severity is never hue alone. */}
                         <p className={styles.severity}>
@@ -305,4 +299,22 @@ function hostOf(url: string): string {
   } catch {
     return url;
   }
+}
+
+/**
+ * Splits an observed value into the figure and what it qualifies.
+ *
+ * "24.78% of circulating supply" becomes "24.78%" and "of circulating supply",
+ * so the measurement can be set as the column's headline with its meaning
+ * beneath it. This is presentation only — the string is the engine's, and it
+ * is never altered, only divided.
+ *
+ * The split requires the first token to actually start like a number, so a
+ * value that is a plain phrase ("Active", "Not available") is left whole
+ * rather than being broken across two sizes of type.
+ */
+function splitMeasurement(value: string): { figure: string; qualifier: string | null } {
+  const match = /^([<>~+-]?\$?\d\S*)\s+(.+)$/.exec(value.trim());
+  if (!match) return { figure: value, qualifier: null };
+  return { figure: match[1], qualifier: match[2] };
 }
