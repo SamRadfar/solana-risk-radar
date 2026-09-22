@@ -1,6 +1,7 @@
 import type { CategoryScore } from "@/lib/risk-engine/types";
 import { scoreColor, scoreMeta } from "@/lib/severity";
 
+import CategoryHelp from "./CategoryHelp";
 import Reveal from "./Reveal";
 import SectionHead from "./SectionHead";
 import styles from "./CategoryProfile.module.css";
@@ -52,7 +53,11 @@ export default function CategoryProfile({
           return (
             <li key={category.category} className={styles.row}>
               <div className={styles.label}>
-                <span className={styles.name}>{category.category}</span>
+                <span className={styles.name}>
+                  {category.category}
+                  {/* Only the icon is interactive; the row itself stays inert. */}
+                  <CategoryHelp category={category.category} />
+                </span>
                 <span className={styles.count}>
                   {category.signalCount} signal{category.signalCount === 1 ? "" : "s"}
                 </span>
