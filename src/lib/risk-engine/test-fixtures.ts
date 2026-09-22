@@ -83,6 +83,8 @@ export function makeInput(overrides: Partial<AnalysisInput> = {}): AnalysisInput
       circulatingSupply: 1_000_000,
       pooledShare: 0.3,
       burnedShare: 0,
+      effectiveTopHolderShare: null,
+      verifiedLockedShare: 0,
       topHolderShare: 0.02,
       top10Share: 0.1,
       next9Share: 0.08,
@@ -131,6 +133,8 @@ export const ARCHETYPES = {
       metadata: { ...makeInput().metadata, isMutable: true, updateAuthority: "Issuer111" },
       holderData: {
         ...makeInput().holderData,
+        effectiveTopHolderShare: null,
+        verifiedLockedShare: 0,
         topHolderShare: 0.12,
         next9Share: 0.2,
         top10Share: 0.32,
@@ -142,6 +146,8 @@ export const ARCHETYPES = {
     makeInput({
       holderData: {
         ...makeInput().holderData,
+        effectiveTopHolderShare: null,
+        verifiedLockedShare: 0,
         topHolderShare: 0.727,
         next9Share: 0.152,
         top10Share: 0.879,
@@ -153,6 +159,8 @@ export const ARCHETYPES = {
     makeInput({
       holderData: {
         ...makeInput().holderData,
+        effectiveTopHolderShare: null,
+        verifiedLockedShare: 0,
         topHolderShare: 0.3729,
         next9Share: 0.4331,
         top10Share: 0.806,
@@ -194,6 +202,8 @@ export const ARCHETYPES = {
       metadata: { ...makeInput().metadata, isMutable: true, updateAuthority: "Deployer1111" },
       holderData: {
         ...makeInput().holderData,
+        effectiveTopHolderShare: null,
+        verifiedLockedShare: 0,
         topHolderShare: 0.6,
         next9Share: 0.38,
         top10Share: 0.98,

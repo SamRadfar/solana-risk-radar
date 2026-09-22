@@ -112,7 +112,26 @@ export function topHolderRule(input: AnalysisInput): RiskSignal {
 
   const share = holderData.topHolderShare;
   const largest = holderData.holders.find((h) => h.kind !== "pool" && h.kind !== "burn");
-  const severity = classify(share, TOP1_BANDS);
+
+  /*
+   * Scored on what can actually be sold.
+   *
+   * Raw concentration is still the headline and still reported — a locked 25%
+   * is 25% of the supply, and the position exists. What the *score* asks is
+   * narrower: how much could be dumped on the market right now. So the severity
+   * is taken from the largest immediately sellable position when, and only
+   * when, some holding is under a restriction this product verified on chain.
+   * Everywhere else the two figures are identical and nothing changes.
+   *
+   * The only restriction that currently qualifies is a frozen token account,
+   * which the token program enforces and which is readable from the account
+   * itself. Custody by a vesting program is disclosed as an attribute but is
+   * never counted here, because the release schedule cannot be read generically
+   * and assuming it would understate risk.
+   */
+  const effective = holderData.effectiveTopHolderShare ?? share;
+  const restricted = effective < share - 0.0001;
+  const severity = classify(restricted ? effective : share, TOP1_BANDS);
 
   const descriptor =
     largest?.kind === "custodian"
@@ -120,6 +139,16 @@ export function topHolderRule(input: AnalysisInput): RiskSignal {
       : largest?.kind === "contract"
         ? " The largest such holder is a program-controlled account, which may be a vesting, staking or escrow contract rather than an individual."
         : "";
+
+  /*
+   * Worded against what was actually measured. The liquid figure is the
+   * largest sellable position across all holders, which is not necessarily the
+   * largest holder's own remainder, so the sentence does not attribute the
+   * difference to that one account.
+   */
+  const restriction = restricted
+    ? ` Part of the largest holdings sits in frozen token accounts and cannot be transferred: once those are excluded, the biggest position that could be sold today is ${pct(effective)} of circulating supply, and that is what this signal is scored on. A freeze is enforced by the token program, but the mint's freeze authority can lift it.`
+    : "";
 
   return signal({
     id: ID,
@@ -131,9 +160,27 @@ export function topHolderRule(input: AnalysisInput): RiskSignal {
     observedValue: `${pct(share)} of circulating supply`,
     explanation:
       severity === "none"
-        ? `The largest sellable holder controls ${pct(share)} of circulating supply — a well-distributed position that no single actor can use to move the market alone.${descriptor}`
-        : `The largest sellable holder controls ${pct(share)} of circulating supply. A position this size can move the price sharply if it is sold, and the holder can exit before most others react.${descriptor}`,
-    evidence: holderEvidence(input),
+        ? `The largest sellable holder controls ${pct(share)} of circulating supply — a well-distributed position that no single actor can use to move the market alone.${descriptor}${restriction}`
+        : `The largest sellable holder controls ${pct(share)} of circulating supply. A position this size can move the price sharply if it is sold, and the holder can exit before most others react.${descriptor}${restriction}`,
+    evidence: [
+      ...holderEvidence(input),
+      ...(restricted
+        ? [
+            {
+              label: "Verified locked",
+              value: `${pct(holderData.verifiedLockedShare)} of circulating supply held in frozen token accounts`,
+            },
+            {
+              label: "Largest liquid position",
+              value: `${pct(effective)} of circulating supply`,
+            },
+            { label: "Scored on", value: "the largest immediately sellable position" },
+          ]
+        : []),
+      ...(largest?.attributes?.length
+        ? [{ label: "Largest holder control", value: describeAttributes(largest) }]
+        : []),
+    ],
   });
 }
 
@@ -179,4 +226,35 @@ export function holderSpreadRule(input: AnalysisInput): RiskSignal {
         : `The nine holders behind the largest one hold ${pct(share)} of circulating supply between them. A cluster this size could move the market together, whether by coordinating or simply by reacting to the same news at the same time.${context}`,
     evidence: holderEvidence(input),
   });
+}
+
+/**
+ * Plain-language summary of a holder's verified control structure.
+ *
+ * Reads only what was established: an unexplained address is reported as
+ * unknown rather than as an individual.
+ */
+export function describeAttributes(holder: {
+  attributes?: string[];
+  multisig?: { threshold: number; signers: number } | null;
+}): string {
+  const labels: Record<string, string> = {
+    burned: "Burned / irrecoverable",
+    "liquidity-pool": "Liquidity pool",
+    exchange: "Exchange / custodian",
+    "program-vault": "Program / vault",
+    locked: "Locked",
+    "lock-program": "Lock / vesting program",
+    multisig: "Multisig",
+    wallet: "Wallet",
+    unknown: "Unknown",
+  };
+
+  return (holder.attributes ?? [])
+    .map((attribute) =>
+      attribute === "multisig" && holder.multisig
+        ? `Multisig ${holder.multisig.threshold}/${holder.multisig.signers}`
+        : (labels[attribute] ?? attribute),
+    )
+    .join(" · ");
 }

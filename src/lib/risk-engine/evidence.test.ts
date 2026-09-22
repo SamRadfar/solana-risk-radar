@@ -101,6 +101,8 @@ describe("unavailable signals never imply a measurement happened", () => {
       circulatingSupply: 0,
       pooledShare: 0,
       burnedShare: 0,
+      effectiveTopHolderShare: null,
+      verifiedLockedShare: 0,
       topHolderShare: null,
       top10Share: null,
       next9Share: null,
@@ -224,6 +226,8 @@ describe("evidence supports the exact claim each signal makes", () => {
       makeInput({
         holderData: {
           ...makeInput().holderData,
+          effectiveTopHolderShare: null,
+          verifiedLockedShare: 0,
           topHolderShare: 0.3729,
           next9Share: 0.4331,
           top10Share: 0.806,

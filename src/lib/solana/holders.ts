@@ -7,6 +7,14 @@ import {
   type TokenLargestAccount,
 } from "./rpc";
 import { classifyHolder, type HolderKind } from "./knownAddresses";
+import {
+  deriveControl,
+  orderAttributes,
+  type ControlEvidence,
+  type HolderAttribute,
+  type TokenAccountState,
+} from "./holderControl";
+import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "./knownAddresses";
 import { toUiAmount, type MintInfo } from "./mint";
 
 /**
@@ -21,10 +29,19 @@ import { toUiAmount, type MintInfo } from "./mint";
  * then classified by the program that owns *it*: an account owned by a known
  * AMM program is a pool vault, one owned by the System Program is an ordinary
  * wallet. Concentration is scored over genuinely circulating supply only.
+ *
+ * Accounts are then **aggregated by owner**. `getTokenLargestAccounts` returns
+ * token accounts, and one wallet may hold several — counted separately they
+ * understate how much a single actor controls, which is the error that matters
+ * here.
+ *
+ * Finally each holder is given a control structure: multisig, lock, vesting,
+ * vault, or nothing at all. See `holderControl` — every attribute comes from an
+ * on-chain fact, and a holder that cannot be explained stays `Unknown`.
  */
 
 export interface Holder {
-  /** The token account address. */
+  /** The token account address, or the first of several for this owner. */
   tokenAccount: string;
   /** The wallet or PDA that owns the token account. */
   owner: string | null;
@@ -34,6 +51,21 @@ export interface Holder {
   share: number;
   kind: HolderKind;
   label: string | null;
+  /** How many token accounts this owner's holding was aggregated from. */
+  accountCount: number;
+  /** Verified control structure. Empty only when nothing could be read. */
+  attributes: HolderAttribute[];
+  /** Decoded m-of-n, when readable. */
+  multisig: { threshold: number; signers: number } | null;
+  /**
+   * Share of total supply in this holding that provably cannot move — today,
+   * only what sits in a frozen token account.
+   */
+  lockedShare: number;
+  /** Share that is transferable now: `share` minus what is verifiably locked. */
+  liquidShare: number;
+  /** Why each attribute was assigned. */
+  evidence: ControlEvidence[];
 }
 
 export interface HolderData {
@@ -48,6 +80,15 @@ export interface HolderData {
   pooledShare: number;
   /** Share of total supply provably burned, 0-1. */
   burnedShare: number;
+  /**
+   * Largest sellable holder's share after verified restrictions are removed.
+   *
+   * Equal to `topHolderShare` unless some of that holding is provably
+   * immobilised, so the raw figure is never replaced — only accompanied.
+   */
+  effectiveTopHolderShare: number | null;
+  /** Total share of circulating supply under a verified, enforced lock. */
+  verifiedLockedShare: number;
   /** Largest single non-pool, non-burn holder's share of circulating supply. */
   topHolderShare: number | null;
   /**
@@ -78,6 +119,8 @@ const UNAVAILABLE = (error: string): HolderData => ({
   circulatingSupply: 0,
   pooledShare: 0,
   burnedShare: 0,
+  effectiveTopHolderShare: null,
+  verifiedLockedShare: 0,
   topHolderShare: null,
   top10Share: null,
   next9Share: null,
@@ -117,6 +160,8 @@ export async function getHolderData(mint: MintInfo): Promise<HolderData> {
       circulatingSupply: mint.supplyUi,
       pooledShare: 0,
       burnedShare: 0,
+      effectiveTopHolderShare: 0,
+      verifiedLockedShare: 0,
       topHolderShare: 0,
       top10Share: 0,
       next9Share: 0,
@@ -124,25 +169,102 @@ export async function getHolderData(mint: MintInfo): Promise<HolderData> {
   }
 
   // Resolve each token account to its owner, then classify each owner by the
-  // program that owns it. Two batched calls, regardless of holder count.
+  // program that owns it. Batched, regardless of holder count.
   const owners = await resolveOwners(largest.map((account) => account.address));
 
   const totalRaw = BigInt(mint.supplyRaw);
-  const holders: Holder[] = largest.map((account) => {
-    const resolved = owners.get(account.address);
-    const owner = resolved?.owner ?? null;
+
+  /*
+   * Aggregate by owner before anything is measured.
+   *
+   * One wallet splitting a holding across several token accounts would
+   * otherwise appear as several smaller holders, understating exactly the
+   * concentration this analysis exists to find. Accounts whose owner could not
+   * be resolved are keyed by their own address, so they are never merged with
+   * each other on the strength of a shared failure.
+   */
+  const grouped = new Map<string, { accounts: typeof largest; owner: string | null }>();
+  for (const account of largest) {
+    const owner = owners.get(account.address)?.owner ?? null;
+    const key = owner ?? `account:${account.address}`;
+    const existing = grouped.get(key);
+    if (existing) existing.accounts.push(account);
+    else grouped.set(key, { accounts: [account], owner });
+  }
+
+  const holders: Holder[] = [...grouped.values()].map(({ accounts, owner }) => {
+    const resolved = owners.get(accounts[0].address);
     const { kind, label } = owner
       ? classifyHolder(owner, resolved?.ownerProgram ?? null, resolved?.executable ?? false)
       : { kind: "wallet" as HolderKind, label: null };
 
+    const amountRaw = accounts
+      .reduce((sum, account) => sum + BigInt(account.amount), BigInt(0))
+      .toString();
+
+    /*
+     * A freeze applies to a token account, not to an owner, so a holding split
+     * across accounts can be partly frozen. Each account contributes its own
+     * balance to the locked total.
+     */
+    let lockedRaw = BigInt(0);
+    const attributes: HolderAttribute[] = [];
+    const evidence: ControlEvidence[] = [];
+    let multisig: { threshold: number; signers: number } | null = null;
+
+    for (const account of accounts) {
+      const meta = owners.get(account.address);
+      const control = deriveControl({
+        kind,
+        ownerProgram: meta?.ownerProgram ?? null,
+        ownerExecutable: meta?.executable ?? false,
+        state: meta?.state ?? null,
+        amountRaw: account.amount,
+        splMultisig: meta?.splMultisig ?? null,
+      });
+
+      lockedRaw += BigInt(control.lockedRaw);
+      multisig = multisig ?? control.multisig;
+      for (const attribute of control.attributes) {
+        if (!attributes.includes(attribute)) attributes.push(attribute);
+      }
+      for (const item of control.evidence) {
+        if (!evidence.some((e) => e.attribute === item.attribute && e.source === item.source)) {
+          evidence.push(item);
+        }
+      }
+    }
+
+    /*
+     * "Unknown" survives unless something beyond the account model was
+     * established. A wallet is still an unknown wallet.
+     */
+    const explained = attributes.some((attribute) =>
+      (
+        ["multisig", "locked", "lock-program", "liquidity-pool", "exchange", "burned"] as const
+      ).includes(attribute as never),
+    );
+    const resolvedAttributes = explained
+      ? attributes.filter((a) => a !== "unknown")
+      : attributes;
+
+    const share = shareOf(amountRaw, totalRaw);
+    const lockedShare = shareOf(lockedRaw.toString(), totalRaw);
+
     return {
-      tokenAccount: account.address,
+      tokenAccount: accounts[0].address,
       owner,
-      amountRaw: account.amount,
-      amountUi: toUiAmount(account.amount, mint.decimals),
-      share: shareOf(account.amount, totalRaw),
+      amountRaw,
+      amountUi: toUiAmount(amountRaw, mint.decimals),
+      share,
       kind,
       label,
+      accountCount: accounts.length,
+      attributes: orderAttributes(resolvedAttributes),
+      multisig,
+      lockedShare,
+      liquidShare: Math.max(0, share - lockedShare),
+      evidence,
     };
   });
 
@@ -167,6 +289,26 @@ export async function getHolderData(mint: MintInfo): Promise<HolderData> {
     circulatingSupply,
     pooledShare,
     burnedShare,
+    /*
+     * Effective liquid concentration: the largest position that could actually
+     * be sold right now, minus only what is verifiably immobilised. It never
+     * replaces the raw figure — both are reported, because a locked 25% is
+     * still 25% of the supply.
+     *
+     * Taken as the maximum liquid share across holders, not the liquid share of
+     * the largest holder. The two differ whenever the biggest position is also
+     * the more restricted one: a holder with 50% of which 45% is frozen has
+     * less to sell than one holding 30% outright, and reporting 5% there would
+     * understate the real exposure — the precise false reassurance this
+     * analysis exists to prevent.
+     */
+    effectiveTopHolderShare:
+      dumpable.length > 0
+        ? rebase(Math.max(...dumpable.map((holder) => holder.liquidShare)))
+        : 0,
+    verifiedLockedShare: rebase(
+      dumpable.reduce((sum, holder) => sum + holder.lockedShare, 0),
+    ),
     topHolderShare: dumpable.length > 0 ? rebase(dumpable[0].share) : 0,
     top10Share: rebase(
       dumpable.slice(0, 10).reduce((sum, holder) => sum + holder.share, 0),
@@ -187,6 +329,10 @@ interface ResolvedOwner {
   owner: string;
   ownerProgram: string | null;
   executable: boolean;
+  /** This token account's own state; `frozen` is an enforced restriction. */
+  state: TokenAccountState | null;
+  /** Decoded SPL multisig, when the owner account turned out to be one. */
+  splMultisig: { threshold: number; signers: number } | null;
 }
 
 /**
@@ -206,9 +352,11 @@ async function resolveOwners(
       await getMultipleAccountsParsed<ParsedTokenAccountInfo>(tokenAccounts);
 
     const ownerByTokenAccount = new Map<string, string>();
+    const stateByTokenAccount = new Map<string, TokenAccountState>();
     value.forEach((account, index) => {
-      const owner = account?.data?.parsed?.info?.owner;
-      if (owner) ownerByTokenAccount.set(tokenAccounts[index], owner);
+      const info = account?.data?.parsed?.info;
+      if (info?.owner) ownerByTokenAccount.set(tokenAccounts[index], info.owner);
+      if (info?.state) stateByTokenAccount.set(tokenAccounts[index], info.state);
     });
 
     const uniqueOwners = [...new Set(ownerByTokenAccount.values())];
@@ -226,12 +374,25 @@ async function resolveOwners(
       }
     });
 
+    /*
+     * An owner that is itself owned by a token program may be an SPL multisig
+     * rather than a wallet. Only those are re-read, and only parsed, so the
+     * extra call is skipped entirely for the ordinary case.
+     */
+    const multisigCandidates = uniqueOwners.filter((owner) => {
+      const program = programByOwner.get(owner)?.program;
+      return program === TOKEN_PROGRAM_ID || program === TOKEN_2022_PROGRAM_ID;
+    });
+    const multisigByOwner = await decodeMultisigs(multisigCandidates);
+
     for (const [tokenAccount, owner] of ownerByTokenAccount) {
       const meta = programByOwner.get(owner);
       result.set(tokenAccount, {
         owner,
         ownerProgram: meta?.program ?? null,
         executable: meta?.executable ?? false,
+        state: stateByTokenAccount.get(tokenAccount) ?? null,
+        splMultisig: multisigByOwner.get(owner) ?? null,
       });
     }
   } catch {
@@ -241,7 +402,47 @@ async function resolveOwners(
   return result;
 }
 
+/**
+ * Reads SPL token multisig accounts, which `jsonParsed` decodes natively.
+ *
+ * This is the one multisig configuration that can be read without a program's
+ * own layout, so it is the only one whose threshold is ever displayed. Other
+ * multisig programs are recognised by their program id and reported without a
+ * threshold rather than with a guessed one.
+ */
+async function decodeMultisigs(
+  owners: string[],
+): Promise<Map<string, { threshold: number; signers: number }>> {
+  const result = new Map<string, { threshold: number; signers: number }>();
+  if (owners.length === 0) return result;
+
+  try {
+    const { value } = await getMultipleAccountsParsed<ParsedMultisigInfo>(owners);
+    value.forEach((account, index) => {
+      const parsed = account?.data?.parsed;
+      if (parsed?.type !== "multisig") return;
+      const info = parsed.info;
+      const threshold = Number(info?.numRequiredSigners);
+      const signers = Number(info?.numValidSigners ?? info?.signers?.length);
+      if (Number.isInteger(threshold) && Number.isInteger(signers) && threshold > 0) {
+        result.set(owners[index], { threshold, signers });
+      }
+    });
+  } catch {
+    // A failed read means no multisig claim is made, which is the safe default.
+  }
+
+  return result;
+}
+
 interface ParsedTokenAccountInfo {
   owner: string;
   mint: string;
+  state?: TokenAccountState;
+}
+
+interface ParsedMultisigInfo {
+  numRequiredSigners?: number;
+  numValidSigners?: number;
+  signers?: string[];
 }

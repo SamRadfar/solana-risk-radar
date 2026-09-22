@@ -158,6 +158,63 @@ describe("holder rules", () => {
     expect(at(0.8)).toBe("critical");
   });
 
+  it("scores a verified freeze on the liquid share, without hiding the raw figure", () => {
+    const signal = signalById(
+      makeInput({
+        holderData: {
+          ...makeInput().holderData,
+          topHolderShare: 0.5,
+          effectiveTopHolderShare: 0.12,
+          verifiedLockedShare: 0.38,
+        },
+      }),
+      "top-holder",
+    );
+
+    // Severity follows what could be sold...
+    expect(signal.severity).toBe("medium");
+    // ...but the headline stays the real position size.
+    expect(signal.observedValue).toBe("50.00% of circulating supply");
+    expect(signal.evidence.find((e) => e.label === "Largest liquid position")?.value).toBe(
+      "12.00% of circulating supply",
+    );
+  });
+
+  it("never lets a freeze on one holder mask a liquid position on another", () => {
+    // Effective liquid concentration is the largest *sellable* position, so a
+    // heavily frozen number-one holder cannot drag the score below a fully
+    // liquid number two.
+    const signal = signalById(
+      makeInput({
+        holderData: {
+          ...makeInput().holderData,
+          topHolderShare: 0.5,
+          effectiveTopHolderShare: 0.3,
+          verifiedLockedShare: 0.45,
+        },
+      }),
+      "top-holder",
+    );
+    expect(signal.severity).toBe("high");
+  });
+
+  it("does not claim a lock when nothing was verified", () => {
+    const signal = signalById(
+      makeInput({
+        holderData: {
+          ...makeInput().holderData,
+          topHolderShare: 0.3,
+          effectiveTopHolderShare: 0.3,
+          verifiedLockedShare: 0,
+        },
+      }),
+      "top-holder",
+    );
+
+    expect(signal.explanation).not.toContain("frozen");
+    expect(signal.evidence.some((e) => e.label === "Verified locked")).toBe(false);
+  });
+
   it("excludes holder signals from the score when data is unavailable", () => {
     const report = build(
       makeInput({
@@ -167,6 +224,8 @@ describe("holder rules", () => {
           circulatingSupply: 0,
           pooledShare: 0,
           burnedShare: 0,
+          effectiveTopHolderShare: null,
+          verifiedLockedShare: 0,
           topHolderShare: null,
           top10Share: null,
           next9Share: null,
@@ -371,6 +430,8 @@ describe("report aggregation", () => {
         metadata: { ...makeInput().metadata, isMutable: true, updateAuthority: "Deployer1111" },
         holderData: {
           ...makeInput().holderData,
+          effectiveTopHolderShare: null,
+          verifiedLockedShare: 0,
           topHolderShare: 0.6,
           top10Share: 0.95,
           next9Share: 0.35,
@@ -423,6 +484,8 @@ describe("report aggregation", () => {
           circulatingSupply: 0,
           pooledShare: 0,
           burnedShare: 0,
+          effectiveTopHolderShare: null,
+          verifiedLockedShare: 0,
           topHolderShare: null,
           top10Share: null,
           next9Share: null,

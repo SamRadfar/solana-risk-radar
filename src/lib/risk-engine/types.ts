@@ -131,6 +131,14 @@ export interface DistributionHolder {
   share: number;
   kind: "pool" | "burn" | "custodian" | "wallet" | "contract";
   label: string | null;
+  /** Token accounts this holding was aggregated from. */
+  accountCount: number;
+  /** Verified control structure; never inferred from balance or inactivity. */
+  attributes: string[];
+  /** Decoded m-of-n, only when the multisig program allows it to be read. */
+  multisig: { threshold: number; signers: number } | null;
+  /** Share of total supply in this holding that provably cannot move. */
+  lockedShare: number;
 }
 
 export interface Distribution {
@@ -139,6 +147,10 @@ export interface Distribution {
   pooledShare: number;
   burnedShare: number;
   topHolderShare: number | null;
+  /** Largest holder's share after verified restrictions. Never replaces it. */
+  effectiveTopHolderShare: number | null;
+  /** Share of circulating supply under a verified, enforced restriction. */
+  verifiedLockedShare: number;
   top10Share: number | null;
   /** Holders 2-10 combined — the figure the spread signal actually scores. */
   next9Share: number | null;

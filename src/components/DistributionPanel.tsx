@@ -53,6 +53,63 @@ const KIND_META: Record<
   },
 };
 
+/**
+ * Verified control attributes, as inline badges.
+ *
+ * Each badge is a statement this product can defend from an on-chain fact, and
+ * its tooltip says exactly what that claim is — "Multisig" does not mean the
+ * allocation is locked, and "Unknown" is about this product's certainty rather
+ * than about the address. The badges reuse the existing kind-badge styling, so
+ * the row stays a row.
+ */
+const ATTRIBUTE_META: Record<string, { label: string; tone: string; note: string }> = {
+  burned: {
+    label: "Burned",
+    tone: "#6f778c",
+    note: "Held at an address from which tokens cannot be recovered.",
+  },
+  "liquidity-pool": {
+    label: "Liquidity pool",
+    tone: "#38d6ec",
+    note: "A DEX pool vault, verified by the program that owns it. Tradable liquidity, not a holder who can dump.",
+  },
+  exchange: {
+    label: "Exchange",
+    tone: "#a3c940",
+    note: "A custodial exchange wallet from the verified address registry. It holds many customers' balances rather than one person's.",
+  },
+  "program-vault": {
+    label: "Program / vault",
+    tone: "#fab219",
+    note: "Owned by an on-chain program rather than a wallet — a vault, escrow or staking account. No lock is implied.",
+  },
+  locked: {
+    label: "Locked",
+    tone: "#22c55e",
+    note: "This token account is frozen, so the balance cannot be transferred. The mint's freeze authority can lift it.",
+  },
+  "lock-program": {
+    label: "Lock / vesting program",
+    tone: "#38d6ec",
+    note: "Custodied by a known lock or vesting program. The release schedule could not be read, so none of this holding is treated as locked — part of it may already be claimable.",
+  },
+  multisig: {
+    label: "Multisig",
+    tone: "#8b5cf6",
+    note: "Controlled by a multisig, so more than one signer is needed to move it. It can still be sold once enough signers agree.",
+  },
+  wallet: {
+    label: "Wallet",
+    tone: "#eef1f7",
+    note: "An ordinary wallet owned by the System Program. These are the holders counted toward concentration.",
+  },
+  unknown: {
+    label: "Unknown",
+    tone: "#6f778c",
+    note: "No further identity or control structure could be verified. It does not mean the address belongs to an individual.",
+  },
+};
+
 const PREVIEW_COUNT = 8;
 
 export default function DistributionPanel({
@@ -138,17 +195,45 @@ export default function DistributionPanel({
                   >
                     {truncateAddress(address, 6)}
                   </a>
-                  <span
-                    className={styles.kind}
-                    style={{
-                      color: meta.tone,
-                      borderColor: `${meta.tone}3d`,
-                      background: `${meta.tone}12`,
-                    }}
-                    title={meta.note}
-                  >
-                    {holder.label ?? meta.label}
-                  </span>
+                  {/*
+                    The verified control structure. Where nothing could be
+                    established the row still carries an identity, so it is
+                    never left bare.
+                  */}
+                  {(holder.attributes?.length
+                    ? holder.attributes
+                    : [holder.kind === "wallet" ? "wallet" : "unknown"]
+                  ).map((attribute) => {
+                    const info = ATTRIBUTE_META[attribute];
+                    if (!info) return null;
+                    const threshold = attribute === "multisig" ? holder.multisig : null;
+                    return (
+                      <span
+                        key={attribute}
+                        className={styles.kind}
+                        style={{
+                          color: info.tone,
+                          borderColor: `${info.tone}3d`,
+                          background: `${info.tone}12`,
+                        }}
+                        title={info.note}
+                      >
+                        {threshold
+                          ? `Multisig ${threshold.threshold}/${threshold.signers}`
+                          : attribute === "exchange" || attribute === "liquidity-pool"
+                            ? (holder.label ?? info.label)
+                            : info.label}
+                      </span>
+                    );
+                  })}
+                  {holder.accountCount > 1 && (
+                    <span
+                      className={styles.excluded}
+                      title={`This owner's balance was aggregated from ${holder.accountCount} token accounts.`}
+                    >
+                      {holder.accountCount} accounts
+                    </span>
+                  )}
                   {excluded && <span className={styles.excluded}>not counted</span>}
                 </div>
 
