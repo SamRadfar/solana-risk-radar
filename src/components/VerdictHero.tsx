@@ -196,7 +196,9 @@ export default function VerdictHero({ report }: { report: RiskReport }) {
                         <h4 className={styles.title}>{concern.label}</h4>
 
                         <p className={`tnum ${styles.figure}`}>{figure}</p>
-                        {qualifier && <p className={styles.qualifier}>{qualifier}</p>}
+                        {/* Always rendered, even when empty: the columns share
+                            grid rows, so each needs the same number of them. */}
+                        <p className={styles.qualifier}>{qualifier}</p>
 
                         {/* Colour, glyph and word together — severity is never hue alone. */}
                         <p className={styles.severity}>

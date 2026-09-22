@@ -4,16 +4,9 @@
  * readout. No axes furniture, no controls, no indicators.
  */
 
-/*
- * Height is 88% of the grid row rather than all of it: the panel read as
- * vertically stretched when it matched the analysis column exactly. An
- * explicit height also overrides the grid's stretch, so the space it gives
- * back sits below the panel rather than being redistributed.
- */
 .panel {
   display: flex;
   flex-direction: column;
-  height: 88%;
   padding: 14px 16px 12px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
@@ -148,6 +141,23 @@
   border-top: 1px solid var(--line);
   font-size: 10.5px;
   color: var(--ink-faint);
+}
+
+/*
+ * Beside the analysis, the panel takes a fraction of the grid row rather than
+ * all of it: matching the analysis column exactly read as vertically
+ * stretched, and an explicit height also overrides the grid's stretch, so the
+ * space it gives back sits below the panel instead of being redistributed.
+ *
+ * Only while the hero is actually two columns, though. Once it stacks, the
+ * panel is its own auto-height row, and a percentage of an indefinite row
+ * resolved shorter than the content — clipping the caption off the bottom at
+ * 834px and below. There it simply sizes to what it holds.
+ */
+@media (min-width: 1024px) {
+  .panel {
+    height: 81%;
+  }
 }
 
 @media (max-width: 640px) {
