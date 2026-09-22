@@ -103,8 +103,6 @@ body {
 
 :root {
   /* Written by the pointer parallax; safe defaults mean it works without JS. */
-  --pointer-x: 0;
-  --pointer-y: 0;
 }
 
 .ambient {
@@ -129,19 +127,24 @@ body {
     var(--canvas);
 }
 
-/* Parallax wrappers. `--depth` is set per layer in the markup. */
-.ambient-parallax {
-  transform: translate3d(
-    calc(var(--pointer-x) * var(--depth, 0px)),
-    calc(var(--pointer-y) * var(--depth, 0px)),
-    0
-  );
-  will-change: transform;
-}
-
+/*
+ * The light sources are larger than the screen.
+ *
+ * Each one used to be exactly viewport-sized, which meant its own box edge ran
+ * down the screen edge — and `glow-a`'s gradient is still at roughly 0.1 alpha
+ * when it gets there. Moving such a layer sideways drags that cut inward, and
+ * a hard vertical line appears mid-screen: measured at 3.5x the luminance
+ * step of the surrounding gradient, exactly at the layer's edge.
+ *
+ * Extending each layer 20vw/20vh past the screen on every side puts those
+ * edges out of reach of anything that can move them. The gradients below are
+ * therefore sized and positioned in viewport units rather than as percentages
+ * of this box, so they land exactly where they always did — the layer grew,
+ * the light did not move.
+ */
 .ambient-glow {
   position: absolute;
-  inset: 0;
+  inset: -20vh -20vw;
 }
 
 /*
@@ -152,8 +155,10 @@ body {
  * strength behind body copy or evidence tables.
  */
 .ambient-glow-a {
+  /* Was `46% 40% at 20% 2%` of a viewport-sized box; the +20vw/+20vh offset
+     is this layer's own overhang. */
   background: radial-gradient(
-    46% 40% at 20% 2%,
+    46vw 40vh at 40vw 22vh,
     rgba(56, 214, 236, 0.16) 0%,
     rgba(56, 214, 236, 0.06) 42%,
     transparent 72%
@@ -162,8 +167,9 @@ body {
 }
 
 .ambient-glow-b {
+  /* Was `44% 38% at 82% 0%`. */
   background: radial-gradient(
-    44% 38% at 82% 0%,
+    44vw 38vh at 102vw 20vh,
     rgba(99, 102, 241, 0.19) 0%,
     rgba(120, 90, 240, 0.07) 44%,
     transparent 74%
@@ -173,8 +179,9 @@ body {
 
 /* 3. A faint violet low on the page — depth, not illumination. */
 .ambient-glow-c {
+  /* Was `54% 30% at 62% 76%`. */
   background: radial-gradient(
-    54% 30% at 62% 76%,
+    54vw 30vh at 82vw 96vh,
     rgba(139, 92, 246, 0.07) 0%,
     transparent 68%
   );
@@ -252,13 +259,18 @@ body {
  * minute — the page reads as alive without any movement being legible as
  * movement.
  */
+/*
+ * Drift distances are viewport units, not percentages of the layer. They used
+ * to be the same thing, because the layer was the viewport; now that it is
+ * larger, a percentage would silently scale the movement up with it.
+ */
 @keyframes drift-a {
   0%,
   100% {
     transform: translate3d(0, 0, 0) scale(1);
   }
   50% {
-    transform: translate3d(3.5%, 2%, 0) scale(1.07);
+    transform: translate3d(3.5vw, 2vh, 0) scale(1.07);
   }
 }
 
@@ -268,7 +280,7 @@ body {
     transform: translate3d(0, 0, 0) scale(1.04);
   }
   50% {
-    transform: translate3d(-3%, 2.5%, 0) scale(1);
+    transform: translate3d(-3vw, 2.5vh, 0) scale(1);
   }
 }
 
@@ -320,10 +332,6 @@ body {
     opacity: 0.85;
   }
 
-  .ambient-parallax {
-    transform: none;
-    will-change: auto;
-  }
 }
 
 /* ---------------------------------------------------------------------------
