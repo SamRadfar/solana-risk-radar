@@ -228,6 +228,123 @@ export interface MarketDiagnostics {
   }[];
 }
 
+// ---------------------------------------------------------------------------
+// Liquidity safety — verified LP lock and burn state.
+//
+// Informational only. Nothing in this block is an input to any rule, to any
+// severity, or to the score: it is evidence the reader can act on, presented
+// beside the liquidity signals rather than folded into them.
+// ---------------------------------------------------------------------------
+
+/**
+ * How a single LP holding is held.
+ *
+ * The vocabulary is deliberately narrow, and each term means one thing:
+ *
+ * - `burned` — held where it can never be redeemed, so the pool reserves
+ *   behind it are permanently stranded. This is the only permanent class.
+ * - `frozen` — the LP token account is frozen, so it cannot be transferred
+ *   today. The freeze authority can lift it, so it is not permanent.
+ * - `lock-program` — custodied by a known LP lock program. Verifiable from the
+ *   owning program id; the release schedule is *not* readable, so this is
+ *   disclosed but never counted as locked.
+ * - `staked` — deposited in a farm or staking program. Withdrawable, and
+ *   explicitly not a lock, however long it has sat there.
+ * - `program` — owned by some other on-chain program. No lock is implied.
+ * - `wallet` / `unknown` — an ordinary account. Withdrawable.
+ */
+export type LpCustodyClass =
+  | "burned"
+  | "frozen"
+  | "lock-program"
+  | "staked"
+  | "program"
+  | "wallet"
+  | "unknown";
+
+/** One LP token account, resolved to its owner and classified. */
+export interface LpHolding {
+  tokenAccount: string;
+  owner: string | null;
+  /** Share of this pool's LP supply, 0-1. */
+  share: number;
+  custody: LpCustodyClass;
+  /** Registry label for the owning program or address, when one is known. */
+  label: string | null;
+}
+
+/**
+ * One pool's LP custody.
+ *
+ * `unmeasuredReason` is the load-bearing field: when it is set, every fraction
+ * below is null and the pool contributes nothing to the aggregate. A pool that
+ * could not be read never becomes a pool with nothing locked.
+ */
+export interface LiquiditySafetyPool {
+  pairAddress: string;
+  dexId: string;
+  liquidityUsd: number;
+  /** Null for venues with no fungible LP token, and whenever unmeasured. */
+  lpMint: string | null;
+  /** Plain-language reason this pool was skipped, or null when it was read. */
+  unmeasuredReason: string | null;
+  lpSupplyRaw: string | null;
+  lpDecimals: number | null;
+  /** All 0-1 shares of this pool's LP supply. Null when unmeasured. */
+  burnedFraction: number | null;
+  frozenFraction: number | null;
+  lockCustodyFraction: number | null;
+  withdrawableFraction: number | null;
+  /** LP supply outside the 20 largest accounts — read, but not attributable. */
+  unattributedFraction: number | null;
+  holders: LpHolding[];
+}
+
+/**
+ * Verified liquidity lock and burn state for the token.
+ *
+ * Every `*Percent` field is a **0-1 fraction of measured liquidity**, not of
+ * all liquidity and not a 0-100 number — `coverage` says how much of the market
+ * those fractions describe. `null` everywhere means "not measured", which is
+ * never the same as zero.
+ *
+ * `burnedPercent` is a **subset** of `lockedPercent`, never an addend. The two
+ * are reported as "X% locked, of which Y% burned"; summing them is the error
+ * this shape exists to prevent.
+ */
+export interface LiquiditySafety {
+  /**
+   * `measured` — nearly all liquidity was read.
+   * `partial` — some was, and `coverage` says how much.
+   * `unmeasured` — none of it could be read. No percentage is stated.
+   * `no-liquidity` — there is no market to measure in the first place.
+   */
+  status: "measured" | "partial" | "unmeasured" | "no-liquidity";
+  confidence: "high" | "medium" | "low" | "none";
+  /** The same consensus total the rest of the report shows. */
+  totalLiquidityUsd: number | null;
+  measuredLiquidityUsd: number;
+  /** `measuredLiquidityUsd / totalLiquidityUsd`, 0-1. */
+  coverage: number | null;
+  /** Provably non-withdrawable: burned plus frozen. Contains `burnedPercent`. */
+  lockedPercent: number | null;
+  /** Permanently unredeemable. A component of `lockedPercent`. */
+  burnedPercent: number | null;
+  /** Under lock-program custody. Disclosed, and deliberately not "locked". */
+  lockCustodyPercent: number | null;
+  unlockedPercent: number | null;
+  unattributedPercent: number | null;
+  /** `"permanent"`, or null when no expiry could be verified. Never guessed. */
+  lockExpiry: string | null;
+  /** Burn destinations and lock programs actually observed. */
+  lockProvider: string | null;
+  sources: string[];
+  pools: LiquiditySafetyPool[];
+  evidence: Evidence[];
+  /** Caveats worth stating in prose — coverage gaps, unattributed supply. */
+  notes: string[];
+}
+
 export interface DataSourceStatus {
   name: string;
   detail: string;
@@ -250,6 +367,11 @@ export interface RiskReport {
   sources: DataSourceStatus[];
   /** Market figures for display. Never an input to the score. */
   market: MarketSnapshot;
+  /**
+   * Verified LP lock and burn state. Informational evidence only — like
+   * `market`, it is displayed beside the signals and never scored.
+   */
+  liquiditySafety: LiquiditySafety;
   /** How those figures were established. Developer-facing, never rendered. */
   diagnostics: MarketDiagnostics;
   generatedAt: string;

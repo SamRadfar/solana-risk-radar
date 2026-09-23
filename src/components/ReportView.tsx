@@ -6,6 +6,7 @@ import SummaryRail from "./SummaryRail";
 import CategoryProfile from "./CategoryProfile";
 import CleanChecks from "./CleanChecks";
 import DistributionPanel from "./DistributionPanel";
+import LiquiditySafetyPanel from "./LiquiditySafetyPanel";
 import RiskLandscape from "./RiskLandscape";
 import Reveal from "./Reveal";
 import SectionHead from "./SectionHead";
@@ -106,6 +107,13 @@ export default function ReportView({ report }: { report: RiskReport }) {
               <CleanChecks signals={sortByCategory(passed)} />
             </section>
           )}
+
+          {/*
+            The two evidence panels sit together and in this order: whether the
+            market itself can be withdrawn, then whether one holder can dump
+            into it. Both are supporting evidence rather than scored signals.
+          */}
+          <LiquiditySafetyPanel safety={report.liquiditySafety} />
 
           <DistributionPanel distribution={report.distribution} />
 

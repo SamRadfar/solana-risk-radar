@@ -439,6 +439,13 @@ export function buildRiskReport(
       poolAddress: canonicalPair(input.marketData)?.pairAddress ?? null,
       poolDex: canonicalPair(input.marketData)?.dexId ?? null,
     },
+    /*
+     * Display-only passthrough, exactly like `market` above. It is carried
+     * through the engine so the report is assembled in one place, and it is
+     * read by no rule — adding it changed no score, no severity and no
+     * verdict.
+     */
+    liquiditySafety: input.liquiditySafety,
     diagnostics: buildDiagnostics(input, overview),
     generatedAt: new Date().toISOString(),
     elapsedMs,

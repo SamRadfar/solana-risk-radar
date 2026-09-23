@@ -14,8 +14,11 @@ import {
   getMarketData,
   marketCap,
   marketIdentity,
+  pairsByLiquidity,
   spotPrice,
+  totalLiquidity,
 } from "@/lib/providers/dexscreener";
+import { getLiquiditySafety } from "@/lib/solana/lpCustody";
 import { buildRiskReport } from "@/lib/risk-engine/engine";
 import { getCached, setCached } from "@/lib/cache";
 import type {
@@ -76,10 +79,26 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  /*
+   * The market is fetched first and on its own, because it is the one lookup
+   * another depends on: LP custody can only be read once the pools to inspect
+   * are known, and those come from the consensus — the same accepted markets
+   * every other figure is drawn from, so a pool the consensus rejected can
+   * never contribute a lock percentage.
+   *
+   * It is a single HTTP call to one aggregator and returns in well under a
+   * second, so paying for it separately costs far less than what it buys:
+   * the LP read then joins the concurrent batch below and overlaps with the
+   * holder scan instead of running after it. Sequencing the two cost ~11s of
+   * added latency on a token with readable pools; overlapping them costs
+   * close to none.
+   */
+  const marketData = await getMarketData(mintAddress);
+
   // Independent lookups run concurrently. Each already degrades to an
   // "unavailable" result internally, so one slow provider cannot fail the
   // report — it only reduces coverage.
-  const [metadata, holderData, tokenAge, marketData] = await Promise.all([
+  const [metadata, holderData, tokenAge, liquiditySafety] = await Promise.all([
     getOnChainMetadata(mintInfo).catch(() => ({
       name: null,
       symbol: null,
@@ -91,7 +110,10 @@ export async function GET(request: NextRequest) {
     })),
     getHolderData(mintInfo),
     getTokenAge(mintAddress),
-    getMarketData(mintAddress),
+    getLiquiditySafety(
+      marketData.available ? pairsByLiquidity(marketData) : [],
+      marketData.available ? totalLiquidity(marketData) : null,
+    ),
   ]);
 
   /*
@@ -162,7 +184,15 @@ export async function GET(request: NextRequest) {
   ];
 
   const report = buildRiskReport(
-    { mint: mintAddress, mintInfo, metadata, holderData, tokenAge, marketData },
+    {
+      mint: mintAddress,
+      mintInfo,
+      metadata,
+      holderData,
+      tokenAge,
+      marketData,
+      liquiditySafety,
+    },
     { overview, sources, elapsedMs: Date.now() - started },
   );
 

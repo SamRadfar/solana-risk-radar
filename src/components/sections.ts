@@ -34,6 +34,7 @@ export function buildSections(report: RiskReport): ReportSection[] {
   if (clean.length > 0) {
     sections.push({ id: "clean", label: "Checks passed", count: clean.length });
   }
+  sections.push({ id: "liquidity-safety", label: "Liquidity safety" });
   sections.push({ id: "distribution", label: "Holders" });
   if (unmeasured.length > 0) {
     sections.push({ id: "unmeasured", label: "Not measured", count: unmeasured.length });

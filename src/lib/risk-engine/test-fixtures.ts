@@ -44,9 +44,38 @@ export function pair(
   } as AnalysisInput["marketData"]["pairs"][number];
 }
 
+/**
+ * The default liquidity-safety input: nothing measured.
+ *
+ * Deliberately the empty result rather than a populated one. No rule reads
+ * this field, so every engine test below must produce an identical score with
+ * it present — which is exactly the property the baseline should assert.
+ */
+export function unmeasuredLiquiditySafety(): AnalysisInput["liquiditySafety"] {
+  return {
+    status: "unmeasured",
+    confidence: "none",
+    totalLiquidityUsd: null,
+    measuredLiquidityUsd: 0,
+    coverage: null,
+    lockedPercent: null,
+    burnedPercent: null,
+    lockCustodyPercent: null,
+    unlockedPercent: null,
+    unattributedPercent: null,
+    lockExpiry: null,
+    lockProvider: null,
+    sources: [],
+    pools: [],
+    evidence: [],
+    notes: [],
+  };
+}
+
 export function makeInput(overrides: Partial<AnalysisInput> = {}): AnalysisInput {
   return {
     mint: "So11111111111111111111111111111111111111112",
+    liquiditySafety: unmeasuredLiquiditySafety(),
     mintInfo: {
       address: "So11111111111111111111111111111111111111112",
       tokenProgram: "spl-token",

@@ -222,6 +222,13 @@ export function getMultipleAccountsParsed<TInfo>(
   return rpcCall("getMultipleAccounts", [addresses, { encoding: "jsonParsed" }]);
 }
 
+/** Full account data, batched. Used to decode AMM pool state. */
+export function getMultipleAccountsBase64(
+  addresses: string[],
+): Promise<RpcContextValue<(RpcAccount<Base64AccountData> | null)[]>> {
+  return rpcCall("getMultipleAccounts", [addresses, { encoding: "base64" }]);
+}
+
 /** Account headers only — `dataSlice` keeps the response small. */
 export function getMultipleAccountOwners(
   addresses: string[],

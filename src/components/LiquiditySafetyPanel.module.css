@@ -1,0 +1,314 @@
+/**
+ * Liquidity safety — an open panel, composed as a sibling of the holder
+ * ranking: figures set as figures, one full-width composition bar, then the
+ * per-pool evidence. No card, for the same reason nothing else below the
+ * verdict has one.
+ */
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+}
+
+.metric {
+  position: relative;
+  padding: 2px 20px 2px 0;
+}
+
+.metric + .metric {
+  padding-left: 20px;
+}
+
+.metric + .metric::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 4px;
+  width: 1px;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.1), transparent 90%);
+}
+
+.metricLabel {
+  font-size: 11.5px;
+  color: var(--ink-muted);
+}
+
+.metricValue {
+  margin-top: 7px;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+  color: var(--ink-secondary);
+}
+
+.metric[data-emphasis="true"] .metricValue {
+  color: var(--ink);
+}
+
+.metricHint {
+  margin-top: 5px;
+  font-size: 10.5px;
+  color: var(--ink-faint);
+}
+
+/* --------------------------------------------------------------------------
+   Composition bar
+-------------------------------------------------------------------------- */
+
+.bar {
+  display: flex;
+  margin-top: 30px;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+  gap: 2px;
+}
+
+.segment {
+  flex: var(--share) 0 0;
+  min-width: 2px;
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+
+[data-reveal="in"] .segment {
+  transform: scaleX(1);
+  transition: transform 850ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin-top: 13px;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--ink-muted);
+}
+
+.legendDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+}
+
+.legendValue {
+  color: var(--ink-secondary);
+  font-weight: 600;
+}
+
+/* --------------------------------------------------------------------------
+   Verification facts
+-------------------------------------------------------------------------- */
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin-top: 30px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.fact {
+  position: relative;
+  padding-right: 20px;
+  cursor: help;
+}
+
+.fact + .fact {
+  padding-left: 20px;
+}
+
+.fact + .fact::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 1px;
+  bottom: 2px;
+  width: 1px;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.1), transparent 90%);
+}
+
+.factLabel {
+  font-size: 11.5px;
+  color: var(--ink-muted);
+}
+
+.factValue {
+  margin: 6px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink-secondary);
+}
+
+/* --------------------------------------------------------------------------
+   Per-pool evidence
+-------------------------------------------------------------------------- */
+
+.pools {
+  margin-top: 28px;
+  list-style: none;
+  padding: 0;
+}
+
+.pool {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+}
+
+.pool + .pool {
+  border-top: 1px solid var(--line);
+}
+
+.pool[data-unmeasured="true"] {
+  opacity: 0.62;
+}
+
+.poolBody {
+  min-width: 0;
+}
+
+.poolTop {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.dex {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+}
+
+.address {
+  font-size: 11px;
+  color: var(--ink-faint);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  transition: color 0.18s ease;
+}
+
+.address:hover {
+  color: var(--accent);
+}
+
+.notMeasured {
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+
+.poolDetail {
+  margin-top: 5px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+.poolLiquidity {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink-secondary);
+}
+
+.more {
+  margin-top: 18px;
+  padding: 6px 13px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* --------------------------------------------------------------------------
+   Notes
+-------------------------------------------------------------------------- */
+
+.notes {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  max-width: 82ch;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--ink-faint);
+  display: grid;
+  gap: 8px;
+}
+
+.absent {
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 70ch;
+  color: var(--ink-secondary);
+}
+
+/* --------------------------------------------------------------------------
+   Responsive
+-------------------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 22px;
+  }
+
+  .metric:nth-child(odd) {
+    padding-left: 0;
+  }
+
+  .metric:nth-child(odd)::before {
+    display: none;
+  }
+
+  .facts {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 16px;
+  }
+
+  .fact + .fact {
+    padding-left: 0;
+  }
+
+  .fact + .fact::before {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .metricValue {
+    font-size: 21px;
+  }
+
+  .pools {
+    margin-top: 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .segment,
+  [data-reveal="in"] .segment {
+    transform: scaleX(1);
+    transition: none;
+  }
+}
+
+@media (scripting: none) {
+  .segment {
+    transform: scaleX(1);
+  }
+}
