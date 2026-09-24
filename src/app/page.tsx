@@ -9,6 +9,9 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import TokenInputForm from "@/components/TokenInputForm";
 import ReportView from "@/components/ReportView";
+import ProductTour from "@/components/onboarding/ProductTour";
+import { PRODUCT_TOUR } from "@/components/onboarding/tourSteps";
+import { useProductTour } from "@/components/onboarding/useProductTour";
 import type { RiskReport } from "@/lib/risk-engine/types";
 
 type Status = "idle" | "loading" | "error" | "result";
@@ -17,6 +20,12 @@ export default function Home() {
   const [status, setStatus] = useState<Status>("idle");
   const [report, setReport] = useState<RiskReport | null>(null);
   const [error, setError] = useState("");
+
+  /*
+   * Owned here so the header's replay control and the dialog address the
+   * same tour. Nothing in the analysis path reads it.
+   */
+  const tour = useProductTour(PRODUCT_TOUR);
 
   const analyze = useCallback(async (address: string) => {
     setStatus("loading");
@@ -62,7 +71,11 @@ export default function Home() {
       <AmbientBackground />
 
       <div className="relative z-10 min-h-screen flex flex-col">
-        <SiteHeader mode={compactLayout ? "result" : "landing"} onReset={reset} />
+        <SiteHeader
+          mode={compactLayout ? "result" : "landing"}
+          onReset={reset}
+          onOpenTour={tour.replay}
+        />
 
         <main className="flex-1 w-full mx-auto px-4 sm:px-6 py-8 sm:py-10 max-w-[1500px]">
           {compactLayout ? (
@@ -89,6 +102,8 @@ export default function Home() {
 
         <SiteFooter />
       </div>
+
+      <ProductTour tour={PRODUCT_TOUR} controller={tour} />
     </>
   );
 }

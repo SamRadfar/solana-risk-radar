@@ -55,9 +55,12 @@ const SCORING_TARGET: Record<"landing" | "result", string> = {
 export default function SiteHeader({
   mode,
   onReset,
+  onOpenTour,
 }: {
   mode: "landing" | "result";
   onReset: () => void;
+  /** Replays the guided tour. Omitted where no tour is mounted. */
+  onOpenTour?: () => void;
 }) {
   const scrolled = useScrolled(6);
   const nav = mode === "landing" ? LANDING_NAV : RESULT_NAV;
@@ -124,6 +127,31 @@ export default function SiteHeader({
             Evidence-backed
           </span>
         </div>
+
+        {/*
+          Replaying the tour is an action, not navigation, so it is a button —
+          and only rendered when the page actually provides a tour.
+        */}
+        {onOpenTour && (
+          <button
+            type="button"
+            className={styles.help}
+            onClick={onOpenTour}
+            aria-label="Replay the product tour"
+            title="Product tour"
+          >
+            <svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.4" />
+              <path
+                d="M7.8 7.6a2.25 2.25 0 1 1 3 2.12c-.5.18-.8.62-.8 1.15v.38"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+              />
+              <circle cx="10" cy="14" r="0.9" fill="currentColor" />
+            </svg>
+          </button>
+        )}
 
         {/*
           A link, not a button: it navigates to an explanation that exists in

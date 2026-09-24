@@ -306,11 +306,40 @@
   }
 }
 
+
+/*
+ * The tour control: a quiet icon button, deliberately lighter than the
+ * scoring CTA beside it. Same hairline language as .cta, no fill, so it reads
+ * as a utility rather than a third call to action.
+ */
+.help {
+  display: inline-grid;
+  place-items: center;
+  height: 32px;
+  width: 32px;
+  border-radius: 9px;
+  flex-shrink: 0;
+  color: var(--ink-muted);
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  background: rgba(255, 255, 255, 0.025);
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+.help:hover {
+  color: var(--ink);
+  border-color: var(--line-accent);
+  background: rgba(56, 214, 236, 0.07);
+}
 @media (prefers-reduced-motion: reduce) {
   .header,
   .header::after,
   .navLink,
   .cta,
+  .help,
   .ctaArrow,
   .brand {
     transition: none;

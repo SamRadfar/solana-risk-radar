@@ -71,6 +71,9 @@ export default function TokenInputForm({
         submit(value);
       }}
       className="w-full"
+      /* Lets the guided tour point at the analyser. Presentation only: the
+         tour treats a missing target as no target. */
+      data-tour="analyser"
     >
       <label htmlFor="mint-address" className="sr-only">
         Solana token mint address
