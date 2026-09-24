@@ -31,7 +31,13 @@ export default function TourVisual({ step }: { step: TourStep }) {
           className={styles.visualImage}
           onError={() => setFailed(true)}
           priority={step.id === "welcome"}
-          sizes="(max-width: 860px) 92vw, 44vw"
+          /*
+           * Served exactly as authored. These are text-heavy UI captures, and
+           * re-encoding an already-lossy WebP a second time softens small
+           * labels and figures — the assets are cut to roughly twice their
+           * rendered density instead, so the browser never has to upscale.
+           */
+          unoptimized
         />
       </span>
       {step.caption && <figcaption className={styles.caption}>{step.caption}</figcaption>}
