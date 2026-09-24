@@ -67,7 +67,7 @@ Scroll to **Holder distribution**:
 
 ## 3 · It finds what others miss (40 seconds)
 
-Click the **PYUSD** chip.
+Paste PYUSD's mint — `2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo`.
 
 > "PayPal's stablecoin — and a Token-2022 mint, which is where it gets
 > interesting."
