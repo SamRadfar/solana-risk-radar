@@ -41,6 +41,7 @@ import {
   tradingActivityRule,
 } from "./rules/market";
 import { poolMaturityRule } from "./rules/maturity";
+import { annotateCorroboration, enforceNonDecreasing, rugSecurityRule } from "./rules/security";
 
 /**
  * The deterministic scoring engine.
@@ -56,6 +57,9 @@ export const RULES: RiskRule[] = [
   freezeAuthorityRule,
   tokenExtensionsRule,
   metadataMutabilityRule,
+  // External cross-check (RugCheck). Scores only findings the on-chain rules
+  // do not already measure; see rules/security.ts.
+  rugSecurityRule,
   // Holders — how concentrated the sellable supply is.
   topHolderRule,
   holderSpreadRule,
@@ -113,6 +117,14 @@ const CATEGORY_POWER = 2;
  * evidence to mean anything, so "Insufficient Data" is reported instead.
  */
 const MIN_COVERAGE_FOR_SCORE = 0.4;
+
+/**
+ * Signals backed by an external provider rather than on-chain/market reads.
+ * They count toward coverage only when they participate in scoring, and can never be what makes an
+ * otherwise too-thin report publishable: the on-chain signals alone must also
+ * meet the coverage threshold.
+ */
+export const EXTERNAL_SIGNAL_IDS: ReadonlySet<string> = new Set(["rug-security"]);
 
 /**
  * Classification bands, calibrated against measured mainnet tokens rather than
@@ -353,7 +365,10 @@ export function buildRiskReport(
   input: AnalysisInput,
   { overview, sources, elapsedMs }: BuildReportOptions,
 ): RiskReport {
-  const signals = RULES.map((rule) => rule(input));
+  // Signal 14 is annotated with the on-chain results it corroborates, then
+  // may only raise risk: clean/overlap-only/unavailable RugCheck results carry
+  // weight 0, and an eligible finding that would lower its category does too.
+  const signals = enforceNonDecreasing(annotateCorroboration(RULES.map((rule) => rule(input))));
   const categories = summariseCategories(signals);
 
   const totalWeight = signals.reduce((sum, s) => sum + s.maxPoints, 0);
@@ -362,7 +377,12 @@ export function buildRiskReport(
     .reduce((sum, s) => sum + s.maxPoints, 0);
 
   const coverage = totalWeight > 0 ? availableWeight / totalWeight : 0;
-  const hasEnoughCoverage = coverage >= MIN_COVERAGE_FOR_SCORE;
+  const onChain = signals.filter((s) => !EXTERNAL_SIGNAL_IDS.has(s.id));
+  const onChainTotal = onChain.reduce((sum, s) => sum + s.maxPoints, 0);
+  const onChainCoverage = onChainTotal > 0
+    ? onChain.filter((s) => s.status === "ok").reduce((sum, s) => sum + s.maxPoints, 0) / onChainTotal
+    : 0;
+  const hasEnoughCoverage = coverage >= MIN_COVERAGE_FOR_SCORE && onChainCoverage >= MIN_COVERAGE_FOR_SCORE;
   const score = aggregateScore(categories);
 
   const warnings: string[] = [];
@@ -377,7 +397,7 @@ export function buildRiskReport(
   }
   if (!hasEnoughCoverage) {
     warnings.push(
-      `Only ${Math.round(coverage * 100)}% of the total signal weight could be evaluated — too little to produce a meaningful score. Treat the individual signals below as the result, not the overall number.`,
+      `Only ${Math.round(Math.min(coverage, onChainCoverage) * 100)}% of the ${onChainCoverage < coverage ? "on-chain " : ""}signal weight could be evaluated — too little to produce a meaningful score. Treat the individual signals below as the result, not the overall number.`,
     );
   }
 

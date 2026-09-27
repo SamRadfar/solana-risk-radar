@@ -12,7 +12,6 @@ import Reveal from "./Reveal";
 import SectionHead from "./SectionHead";
 import SignalLedger from "./SignalLedger";
 import SourceStrip from "./SourceStrip";
-import ActivityIntelligence from "./ActivityIntelligence";
 import styles from "./ReportView.module.css";
 
 /**
@@ -117,8 +116,6 @@ export default function ReportView({ report }: { report: RiskReport }) {
           <LiquiditySafetyPanel safety={report.liquiditySafety} />
 
           <DistributionPanel distribution={report.distribution} />
-
-          <ActivityIntelligence key={report.overview.mint} mint={report.overview.mint} />
 
           {unmeasured.length > 0 && (
             <section id="unmeasured" className="anchor">

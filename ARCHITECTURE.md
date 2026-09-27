@@ -34,10 +34,11 @@ GET /api/analyze?address=…                     src/app/api/analyze/route.ts
   ├─ Promise.all:
   │    ├─ getOnChainMetadata()   Metaplex PDA or Token-2022 extension
   │    ├─ getHolderData()        largest accounts → owners → classification
-  │    └─ getMarketData()        DexScreener
+  │    ├─ getMarketData()        DexScreener
+  │    └─ fetchRugCheckSummary() RugCheck report summary (external, never throws)
   │
   ├─ buildRiskReport()                         src/lib/risk-engine/engine.ts
-  │    └─ 13 pure rules → signals → category roll-up → score
+  │    └─ 13 on-chain rules + 1 external cross-check → signals → category roll-up → score
   ▼
 RiskReport (JSON) → rendered by ReportView
 ```

@@ -73,7 +73,7 @@ function CheckRow({ signal }: { signal: RiskSignal }) {
             <span>{signal.metric}</span>
             <span className={styles.dot} aria-hidden="true" />
             <span className="tnum">
-              0 / {signal.maxPoints} pts charged
+              {signal.maxPoints === 0 ? "context only · not scored" : `0 / ${signal.maxPoints} pts charged`}
             </span>
           </div>
 

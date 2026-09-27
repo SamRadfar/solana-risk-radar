@@ -48,8 +48,8 @@ Built for the Superteam Germany **Road to Colosseum Hackathon**.
 
 Solana Risk Radar takes any SPL or Token-2022 mint address and produces an **explainable risk
 report** in seconds. It reads real on-chain and market data at request time, runs it through
-thirteen deterministic rules with published thresholds, and shows exactly which signals drove
-the result.
+thirteen deterministic rules with published thresholds, plus one conservatively weighted
+external security cross-check from RugCheck, and shows exactly which signals drove the result.
 
 - **No LLM decides anything.** Every number comes from a published rule with a published
   threshold, and identical inputs always produce an identical score.
@@ -260,13 +260,8 @@ Risk Radar is built to be trustworthy about what it does *not* know:
 
 ## Architecture
 
-The secondary, on-demand [Activity Intelligence evidence panel](docs/ACTIVITY_INTELLIGENCE.md)
-is observation-only. It optionally uses `HELIUS_API_KEY`, is versioned separately,
-and does not change the 13 scored signals, coverage or Market Integrity v2.5.
-
-A single Next.js app with no database or user accounts. The core risk report works
-without API keys. Recent reports and optional activity evidence use bounded,
-process-local caches; there is no durable history store.
+A single Next.js app. No database, no accounts, no API keys — everything is read live at request
+time and nothing is stored.
 
 | Source | Used for | Auth |
 |---|---|---|
@@ -274,6 +269,7 @@ process-local caches; there is no durable history store.
 | **Metaplex / Token-2022 metadata** | Name, symbol, update authority, mutability, extensions | None — read directly from chain |
 | **DexScreener** | Pools, liquidity, volume, trade counts, pool age, quoted prices | None — free public API |
 | **GeckoTerminal** | 4-hour OHLCV for the market context chart | None — free public API |
+| **RugCheck** | External security cross-check (Rug / Security Risk). Weight 6 only when it reports RugCheck-specific issues; clean, overlap-only or unavailable results are context only and never lower the 13-signal score | None — public report summary API |
 
 The two market APIs are rate-limited on their free tiers, so completed reports are cached in
 process for 60 seconds and chart history for the same. That cache is the only long-lived state,

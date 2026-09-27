@@ -16,7 +16,7 @@ import styles from "./CategoryHelp.module.css";
  */
 const MEANING: Record<RiskCategory, string> = {
   Authorities:
-    "Checks whether the token can still be minted, frozen, or otherwise controlled by active authorities.",
+    "Checks whether the token can still be minted, frozen, or otherwise controlled by active authorities, with an external security cross-check from RugCheck.",
   Holders:
     "Measures how concentrated the sellable token supply is among the largest wallets.",
   Liquidity:

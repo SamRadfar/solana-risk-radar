@@ -77,7 +77,7 @@ function Message() {
           className="h-1.5 w-1.5 rounded-full"
           style={{ background: "var(--accent)", boxShadow: "0 0 8px var(--accent-glow)" }}
         />
-        13 deterministic signals · 5 risk categories
+        13 on-chain signals + RugCheck cross-check · 5 risk categories
       </Reveal>
 
       {/*

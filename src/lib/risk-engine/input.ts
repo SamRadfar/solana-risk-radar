@@ -3,6 +3,7 @@ import type { OnChainMetadata } from "../solana/metadata";
 import type { HolderData } from "../solana/holders";
 import type { MarketData } from "../market/types";
 import type { LiquiditySafety } from "./types";
+import type { RugCheckResult } from "../providers/rugcheck";
 
 /** All raw data the risk engine needs, already fetched from providers. */
 export interface AnalysisInput {
@@ -19,6 +20,11 @@ export interface AnalysisInput {
    * `RULES` in the engine — none of them takes this field.
    */
   liquiditySafety: LiquiditySafety;
+  /**
+   * External RugCheck report summary, read only by the Rug / Security Risk
+   * rule. `unavailable` excludes that signal from the score denominator.
+   */
+  rugCheck: RugCheckResult;
 }
 
 /** A rule is a pure function of fetched data to a single signal. */

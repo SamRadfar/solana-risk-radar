@@ -74,10 +74,19 @@ export function unmeasuredLiquiditySafety(): AnalysisInput["liquiditySafety"] {
   };
 }
 
+export function cleanRugCheck(): Extract<AnalysisInput["rugCheck"], { status: "ok" }> {
+  return {
+    status: "ok", httpStatus: 200, latencyMs: 90, fetchedAt: 0,
+    summary: { scoreNormalised: 1, risks: [], lpLockedPct: 0, tokenProgram: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" },
+  };
+}
+
 export function makeInput(overrides: Partial<AnalysisInput> = {}): AnalysisInput {
   const input: AnalysisInput = {
     mint: "So11111111111111111111111111111111111111112",
     liquiditySafety: unmeasuredLiquiditySafety(),
+    // A clean external report by default: measured, no findings.
+    rugCheck: cleanRugCheck(),
     mintInfo: {
       address: "So11111111111111111111111111111111111111112",
       tokenProgram: "spl-token",

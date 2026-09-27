@@ -18,7 +18,7 @@ import styles from "./SignalLanes.module.css";
 const LANES: { title: string; question: string }[] = [
   {
     title: "Authorities",
-    question: "Can supply still be minted, wallets frozen, or transfers intercepted?",
+    question: "Can supply still be minted, wallets frozen, or transfers intercepted? Cross-checked by RugCheck.",
   },
   {
     title: "Holders",
@@ -46,7 +46,7 @@ export default function SignalLanes() {
           What gets checked
         </h2>
         <p className="text-[11px]" style={{ color: "var(--ink-faint)" }}>
-          Five dimensions · 13 deterministic signals
+          Five dimensions · 13 on-chain signals + 1 external cross-check
         </p>
       </Reveal>
 
