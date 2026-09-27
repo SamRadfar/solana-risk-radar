@@ -64,10 +64,11 @@ export function normalizeActivity(row: unknown, mint: string, pools: ActivityPoo
   const roots = new Set(legs.map(l => l.ix.instructionIndex));
   // Also reject another (possibly unsupported) swap root and unrelated token
   // transfers: whole-transaction balance deltas cannot allocate these safely.
+  // get_account_data_size is the value-free Token CPI inside ATA creation (live Helius naming).
   const root = [...roots][0];
   const otherEconomicInstruction = instructions.some(ix => ix.instructionIndex !== root &&
     (object(ix.summary).type === "swap" || /transfer|mint_to|burn|liquidity/i.test(String(ix.instructionName)) ||
-      ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"].includes(String(ix.programId)) && !/initialize|close|sync_native/i.test(String(ix.instructionName))));
+      ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"].includes(String(ix.programId)) && !/initialize|close|sync_native|get_account_data_size/i.test(String(ix.instructionName))));
   if (roots.size !== 1 || otherEconomicInstruction) return { kind: "unparsed", reason: "Multiple economic roots or unallocated transfers" };
   const keys = staticKeys;
   const required = integer(object(message.header).numRequiredSignatures);

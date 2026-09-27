@@ -170,6 +170,25 @@ describe("fail-closed boundaries and resource limits", () => {
     row.rawTransaction.transaction.message.instructions.push(row.rawTransaction.transaction.message.instructions[0]);
     expect(normalizeActivity(row, MINT, POOLS, "s")).toMatchObject({ kind: "unparsed", reason: "Multiple economic roots or unallocated transfers" });
   });
+  it("live Helius ATA-creation root (get_account_data_size CPI) is setup, not an unallocated transfer", () => {
+    // Shape observed in live Parsed Events payloads: a separate CreateIdempotent root whose
+    // Token-program CPIs are get_account_data_size / initialize_immutable_owner / initialize_account_3.
+    const withAtaRoot = (innerName: string) => {
+      const row = transaction(1);
+      const keys = row.rawTransaction.transaction.message.accountKeys as string[];
+      const ata = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL", token = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+      keys.push(ata, token);
+      const setup = { instructionIndex: 1, innerInstructionIndex: null as number | null, programId: ata, rawAccounts: [keys[1], "base-account"], rawData: "2", instructionName: "create_idempotent", summary: {} as never, decoded: { accounts: [] as { name: string; pubkey: string }[] } };
+      const inner = ["get_account_data_size", "initialize_immutable_owner", innerName].map((name, i) => ({ ...setup, innerInstructionIndex: i, programId: token, rawAccounts: ["base-account"], rawData: String(i + 3), instructionName: name }));
+      row.parsed.instructions.push(setup, ...inner);
+      const compiled = (ix: typeof setup) => ({ programIdIndex: keys.indexOf(ix.programId), accounts: ix.rawAccounts.map(k => keys.indexOf(k)), data: ix.rawData });
+      row.rawTransaction.transaction.message.instructions.push(compiled(setup));
+      (row.rawTransaction.meta.innerInstructions as unknown[]).push({ index: 1, instructions: inner.map(compiled) });
+      return row;
+    };
+    expect(normalizeActivity(withAtaRoot("initialize_account_3"), MINT, POOLS, "s")).toMatchObject({ kind: "trade", trade: { traderResolutionStatus: "RESOLVED", side: "SELL" } });
+    expect(normalizeActivity(withAtaRoot("transfer"), MINT, POOLS, "s")).toMatchObject({ kind: "unparsed", reason: "Multiple economic roots or unallocated transfers" });
+  });
   it("same-slot ordering is ambiguous and cannot create round trips", () => {
     const result = measureActivity(rows(4, { wallet: "cycler", sameSlot: 123 }).map(trade));
     expect(result.cycling.roundTripCount).toBe(0);
