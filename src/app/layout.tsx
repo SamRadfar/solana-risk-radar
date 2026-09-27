@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Solana Risk Radar",
     description:
-      "Deterministic, evidence-backed risk analysis for any Solana token. 13 signals, 5 categories, every number auditable.",
+      "Deterministic, evidence-backed risk analysis for any Solana token. 13 on-chain signals plus an external RugCheck cross-check, 5 categories, every number auditable.",
     type: "website",
   },
 };

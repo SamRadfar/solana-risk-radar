@@ -86,8 +86,12 @@ for (const viewport of VIEWPORTS) {
     .waitFor({ state: "visible", timeout: 90_000 });
 
   check(true, "report renders after analysis");
-  check(apiReport.signals.length === 13 && apiReport.totalWeight === 152,
-    "report has 13 signals and total signal weight 152");
+  check(apiReport.signals.length === 14 && apiReport.totalWeight === 158,
+    "report has 14 signals and total signal weight 158");
+  const rug = apiReport.signals.find((s) => s.id === "rug-security");
+  check(rug && rug.category === "Authorities" && rug.maxPoints === 6 && rug.evidence.some((e) => e.label === "Source" && e.value.includes("RugCheck")),
+    "Rug / Security Risk signal is present, weight 6, and discloses RugCheck as its source");
+  check(rug && (rug.status === "ok" || rug.points === 0), "an unavailable RugCheck result contributes no points");
   const maturity = apiReport.signals.filter(s => s.category === "Maturity");
   check(maturity.length === 1 && maturity[0].id === "pool-maturity" && maturity[0].maxPoints === 12,
     "Pool Age is the only maturity signal, with its existing weight");

@@ -20,6 +20,7 @@ import {
 import { getMarketData } from "@/lib/market/service";
 import { reportCacheKey, MARKET_ALGORITHM_VERSION } from "@/lib/market/policy";
 import { getLiquiditySafety } from "@/lib/solana/lpCustody";
+import { fetchRugCheckSummary } from "@/lib/providers/rugcheck";
 import { buildRiskReport } from "@/lib/risk-engine/engine";
 import { getCached, setCached } from "@/lib/cache";
 import type {
@@ -86,7 +87,7 @@ export async function GET(request: NextRequest) {
   // Independent lookups run concurrently. Each already degrades to an
   // "unavailable" result internally, so one slow provider cannot fail the
   // report — it only reduces coverage.
-  const [metadata, holderData, liquiditySafety] = await Promise.all([
+  const [metadata, holderData, liquiditySafety, rugCheck] = await Promise.all([
     getOnChainMetadata(mintInfo).catch(() => ({
       name: null,
       symbol: null,
@@ -101,6 +102,8 @@ export async function GET(request: NextRequest) {
       marketData.available ? pairsByLiquidity(marketData) : [],
       marketData.available ? totalLiquidity(marketData) : null,
     ),
+    // External cross-check. Never throws; failures become an unavailable signal.
+    fetchRugCheckSummary(mintAddress),
   ]);
 
   /*
@@ -154,6 +157,13 @@ export async function GET(request: NextRequest) {
           : `Read from ${metadata.source === "metaplex" ? "the Metaplex metadata account" : "the Token-2022 metadata extension"}`,
       ok: metadata.source !== "none",
     },
+    {
+      name: "RugCheck",
+      detail: rugCheck.status === "ok"
+        ? `External security report summary (HTTP ${rugCheck.httpStatus}, ${rugCheck.latencyMs} ms)`
+        : rugCheck.reason,
+      ok: rugCheck.status === "ok",
+    },
     ...(marketData.validation?.providers ?? []).map(p => ({
       name: p.provider, detail: p.status + ": " + (p.priceUsd === null ? p.errors.join("; ") || "No reconciled price" : String(p.priceUsd)),
       ok: p.status === "usable",
@@ -168,6 +178,7 @@ export async function GET(request: NextRequest) {
       holderData,
       marketData,
       liquiditySafety,
+      rugCheck,
     },
     { overview, sources, elapsedMs: Date.now() - started },
   );

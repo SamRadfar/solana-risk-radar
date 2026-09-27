@@ -1,0 +1,169 @@
+{
+ "_note": "Captured live from GET https://api.rugcheck.xyz/v1/tokens/{mint}/report/summary on 2026-09-27. Unmodified response bodies.",
+ "SOL": {
+  "mint": "So11111111111111111111111111111111111111112",
+  "body": {
+   "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+   "tokenType": "",
+   "risks": [],
+   "score": 1,
+   "score_normalised": 1,
+   "lpLockedPct": 0
+  }
+ },
+ "USDC": {
+  "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "body": {
+   "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+   "tokenType": "",
+   "risks": [],
+   "score": 1,
+   "score_normalised": 1,
+   "lpLockedPct": 0
+  }
+ },
+ "JUP": {
+  "mint": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+  "body": {
+   "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+   "tokenType": "",
+   "risks": [
+    {
+     "name": "Mutable metadata",
+     "value": "",
+     "description": "Token metadata can be changed by the owner",
+     "score": 100,
+     "level": "warn"
+    }
+   ],
+   "score": 101,
+   "score_normalised": 7,
+   "lpLockedPct": 1.3377642272181758
+  }
+ },
+ "creatorHistoryAndLp": {
+  "mint": "CcygshDRrwNnmxyv9wSW5RrdWgQso9gX63RUZeZoZsBX",
+  "body": {
+   "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+   "tokenType": "",
+   "risks": [
+    {
+     "name": "Creator history of rugged tokens",
+     "value": "",
+     "description": "Creator has a history of rugging tokens.",
+     "score": 55200,
+     "level": "danger"
+    },
+    {
+     "name": "Large Amount of LP Unlocked",
+     "value": "100.00%",
+     "description": "A large amount of LP tokens are unlocked, allowing the owner to remove liquidity at any point.",
+     "score": 11000,
+     "level": "danger"
+    },
+    {
+     "name": "Low Liquidity",
+     "value": "$0.07",
+     "description": "Low amount of liquidity in the token pool",
+     "score": 2999,
+     "level": "danger"
+    },
+    {
+     "name": "Low amount of LP Providers",
+     "value": "",
+     "description": "Only a few users are providing liquidity",
+     "score": 500,
+     "level": "warn"
+    }
+   ],
+   "score": 69700,
+   "score_normalised": 75,
+   "lpLockedPct": 0
+  }
+ },
+ "permanentControl": {
+  "mint": "2FZ9uQP1eVRA1t3C7NJN7gvneZQdoWKVbT6Mso9k8boP",
+  "body": {
+   "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+   "tokenType": "",
+   "risks": [
+    {
+     "name": "Mint Authority still enabled",
+     "value": "",
+     "description": "More tokens can be minted by the owner",
+     "score": 50000,
+     "level": "danger"
+    },
+    {
+     "name": "Permanent Control Enabled",
+     "value": "",
+     "description": "The token creator can permanently control all tokens",
+     "score": 50000,
+     "level": "danger"
+    },
+    {
+     "name": "Low Liquidity",
+     "value": "$0.00",
+     "description": "Low amount of liquidity in the token pool",
+     "score": 3000,
+     "level": "danger"
+    },
+    {
+     "name": "Mutable metadata",
+     "value": "",
+     "description": "Token metadata can be changed by the owner",
+     "score": 100,
+     "level": "warn"
+    }
+   ],
+   "score": 103101,
+   "score_normalised": 79,
+   "lpLockedPct": 0
+  }
+ },
+ "holderConcentration": {
+  "mint": "Bb9yNvL9p8RfEV3MqaEzFGTK2Xe2EXWpSKhWttQCFV7B",
+  "body": {
+   "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+   "tokenType": "",
+   "risks": [
+    {
+     "name": "Single holder ownership",
+     "value": "49.26%",
+     "description": "One user holds a large amount of the token supply",
+     "score": 4925,
+     "level": "danger"
+    },
+    {
+     "name": "High holder concentration",
+     "value": "",
+     "description": "The top 10 users hold more than 50% token supply",
+     "score": 1008,
+     "level": "warn"
+    }
+   ],
+   "score": 5934,
+   "score_normalised": 43,
+   "lpLockedPct": 100
+  }
+ },
+ "creatorHistoryOnly": {
+  "mint": "52w27fawzA6ko2Ny4S1gi1zP3ho6wTsu11AboBsLpump",
+  "body": {
+   "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+   "tokenType": "",
+   "risks": [
+    {
+     "name": "Creator history of rugged tokens",
+     "value": "",
+     "description": "Creator has a history of rugging tokens.",
+     "score": 7200,
+     "level": "danger"
+    }
+   ],
+   "score": 7201,
+   "score_normalised": 45,
+   "lpLockedPct": 100
+  }
+ }
+}

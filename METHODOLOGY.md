@@ -236,10 +236,11 @@ score summarises the profile, the concerns list surfaces the specific danger.
 
 ## 4. The rules
 
-Total weight **152** across 13 rules in 5 categories. Remember that weights
+Total weight **158** across 14 rules in 5 categories: 13 deterministic on-chain
+and market rules (152) plus one external cross-check (6). Remember that weights
 matter only *within* a category.
 
-### Authorities — 58 points across 4 rules
+### Authorities — 64 points across 5 rules (58 on-chain + 6 external)
 
 #### `mint-authority` — weight 20
 | Observed | Severity |
@@ -286,6 +287,81 @@ and is invisible to checkers that only look at mint and freeze authority.
 | Immutable | `none` |
 | Mutable | `medium` |
 | No metadata account | `unavailable` |
+
+#### `rug-security` — Rug / Security Risk — weight 6 (external: RugCheck)
+
+An independent second opinion from RugCheck, read from the documented report
+summary `GET https://api.rugcheck.xyz/v1/tokens/{mint}/report/summary`
+(`dto.TokenCheckSummary`: `score`, `score_normalised`, `risks[]` with `name`,
+`description`, `level`, `score`, `value`; `lpLockedPct`, `tokenProgram`,
+`tokenType`, `error`). RugCheck's headline score is **never** copied: it is
+shown as context only. Its structured findings are mapped deterministically.
+
+**Only findings the 13 on-chain rules do not measure are scored.** A finding
+that repeats an existing measurement is shown as corroboration, annotated with
+what that on-chain signal actually found, and charged nowhere else:
+
+| RugCheck finding | Corroborates (scored there, not here) |
+|---|---|
+| Mint Authority still enabled | `mint-authority` |
+| Freeze Authority still enabled | `freeze-authority` |
+| Mutable metadata | `metadata-mutability` |
+| Permanent Control Enabled · Fee config enabled | `token-extensions` |
+| Single holder ownership | `top-holder` |
+| High ownership · Top 10 holders high ownership · High holder concentration | `holder-spread` |
+| Low Liquidity | `liquidity-depth` |
+
+If the corroborated on-chain signal could not be measured, the finding is shown
+for reference and scored nowhere: an external finding is never substituted for
+an on-chain measurement or moved into another category's score.
+
+RugCheck-specific findings are grouped by underlying issue, so several findings
+describing one condition count once:
+
+| Issue | RugCheck findings |
+|---|---|
+| Creator history of rugged tokens | Creator history of rugged tokens |
+| Withdrawable LP / few LP providers | Large Amount of LP Unlocked · Low amount of LP Providers |
+| Missing metadata file | Missing file metadata |
+| Market cap high relative to holder count | High market cap per holder |
+
+LP custody is displayed elsewhere in the report but was never scored, so LP
+findings add information to the score rather than repeating it.
+
+| Distinct RugCheck-specific issues (level observed live: `warn`, `danger`) | Severity |
+|---|---|
+| None (or corroborating findings only) | `none` |
+| 1 at `warn` | `low` |
+| 2+ at `warn` | `medium` |
+| 1 at `danger` | `high` |
+| 2+ at `danger` | `critical` |
+
+Schema drift: an unrecognized finding name might duplicate an existing signal,
+so it counts at most as `warn`. A finding with an unrecognized level is shown
+but not scored. Neither crashes analysis.
+
+**Unavailable, never low risk.** Timeouts (5 s), HTTP 429/5xx, 4xx (for example
+`unable to generate report`), non-JSON bodies, a missing or non-list `risks`,
+an unreadable finding, an `error` field, or a report whose `tokenProgram` differs
+from the mint's owning program all make the signal `unavailable`: 0 points and
+excluded from the denominator. One request, no retries.
+
+**Why weight 6, in Authorities.** Weight equals the smallest existing rule weight
+(metadata mutability, pool diversity, trade imbalance, volatility): an external
+opinion we cannot verify must never outweigh an on-chain rule it could
+corroborate. A sixth category was rejected because a clean category would
+dilute every token's power mean and shift the calibrated bands. Authorities is
+the largest category (58), so the signal moves it by at most 6/64 = 9.4 points,
+and moves an otherwise clean token's overall score by at most 4 (tested). The
+issues it scores — creator history, withdrawable LP, permanent control — are
+about what the creator retains control of. A clean RugCheck report dilutes
+Authorities by at most ×58/64, as any measured clean rule would. Finally, an
+external signal can never make a too-thin report publishable: the 13 on-chain
+rules must reach the 40% coverage threshold on their own.
+
+RugCheck findings are a third party's assessment. The signal flags risk to
+review; it does not prove a rug or scam, and a clean report does not prove a
+token safe.
 
 ---
 
@@ -439,7 +515,7 @@ not a price prediction.
 Pool Age is the only maturity signal. It uses the oldest independently corroborated
 pool creation timestamp. Without that measurement, its 12 points are unavailable
 and excluded from the measurable-weight numerator and category scoring. Total
-possible signal weight remains 152; coverage is measurable weight / 152 × 100.
+possible signal weight is 158; coverage is measurable weight / 158 × 100.
 
 ---
 

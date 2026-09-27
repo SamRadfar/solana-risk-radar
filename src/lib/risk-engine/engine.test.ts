@@ -356,13 +356,13 @@ describe("maturity rules", () => {
   it("counts the existing measured pool age once in scoring and coverage", () => {
     const report = build(makeInput());
     const maturity = report.signals.filter((s) => s.category === "Maturity");
-    expect(report.signals).toHaveLength(13);
+    expect(report.signals).toHaveLength(14);
     expect(maturity).toHaveLength(1);
     expect(maturity[0]).toMatchObject({
       id: "pool-maturity", label: "Pool Age", status: "ok", maxPoints: 12,
     });
-    expect(report.totalWeight).toBe(152);
-    expect(report.availableWeight).toBe(152);
+    expect(report.totalWeight).toBe(158);
+    expect(report.availableWeight).toBe(158);
     expect(report.coveragePercent).toBe(100);
     expect(report.categories.find((c) => c.category === "Maturity")).toMatchObject({
       signalCount: 1, maxPoints: 12, weight: 20,
@@ -382,14 +382,14 @@ describe("maturity rules", () => {
     expect(missing[0]).toMatchObject({
       id: "pool-maturity", label: "Pool Age", maxPoints: 12, points: 0,
     });
-    expect(report.signals).toHaveLength(13);
-    expect(report.totalWeight).toBe(152);
-    expect(report.availableWeight).toBe(140);
-    expect(report.coveragePercent).toBe(Math.round(140 / 152 * 100));
+    expect(report.signals).toHaveLength(14);
+    expect(report.totalWeight).toBe(158);
+    expect(report.availableWeight).toBe(146);
+    expect(report.coveragePercent).toBe(Math.round(146 / 158 * 100));
     expect(report.categories.find((c) => c.category === "Maturity")).toMatchObject({
       signalCount: 1, maxPoints: 0, percent: null, weight: 20,
     });
-    expect(report.warnings.join(" ")).toContain("1 of 13 signals could not be measured (Pool Age)");
+    expect(report.warnings.join(" ")).toContain("1 of 14 signals could not be measured (Pool Age)");
   });
 
   it("flags a brand-new pool as critical", () => {

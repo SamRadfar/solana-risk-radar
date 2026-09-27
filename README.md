@@ -48,8 +48,8 @@ Built for the Superteam Germany **Road to Colosseum Hackathon**.
 
 Solana Risk Radar takes any SPL or Token-2022 mint address and produces an **explainable risk
 report** in seconds. It reads real on-chain and market data at request time, runs it through
-thirteen deterministic rules with published thresholds, and shows exactly which signals drove
-the result.
+thirteen deterministic rules with published thresholds, plus one conservatively weighted
+external security cross-check from RugCheck, and shows exactly which signals drove the result.
 
 - **No LLM decides anything.** Every number comes from a published rule with a published
   threshold, and identical inputs always produce an identical score.
@@ -269,6 +269,7 @@ time and nothing is stored.
 | **Metaplex / Token-2022 metadata** | Name, symbol, update authority, mutability, extensions | None — read directly from chain |
 | **DexScreener** | Pools, liquidity, volume, trade counts, pool age, quoted prices | None — free public API |
 | **GeckoTerminal** | 4-hour OHLCV for the market context chart | None — free public API |
+| **RugCheck** | External security cross-check (Rug / Security Risk, weight 6 of 158); findings that repeat on-chain signals are shown, not scored twice | None — public report summary API |
 
 The two market APIs are rate-limited on their free tiers, so completed reports are cached in
 process for 60 seconds and chart history for the same. That cache is the only long-lived state,
