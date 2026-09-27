@@ -260,8 +260,13 @@ Risk Radar is built to be trustworthy about what it does *not* know:
 
 ## Architecture
 
-A single Next.js app. No database, no accounts, no API keys — everything is read live at request
-time and nothing is stored.
+The secondary, on-demand [Activity Intelligence evidence panel](docs/ACTIVITY_INTELLIGENCE.md)
+is observation-only. It optionally uses `HELIUS_API_KEY`, is versioned separately,
+and does not change the 13 scored signals, coverage or Market Integrity v2.5.
+
+A single Next.js app with no database or user accounts. The core risk report works
+without API keys. Recent reports and optional activity evidence use bounded,
+process-local caches; there is no durable history store.
 
 | Source | Used for | Auth |
 |---|---|---|
