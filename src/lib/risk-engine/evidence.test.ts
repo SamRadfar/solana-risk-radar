@@ -108,14 +108,6 @@ describe("unavailable signals never imply a measurement happened", () => {
       next9Share: null,
       error: "RPC rate limited",
     },
-    tokenAge: {
-      available: false,
-      oldestSignatureAt: null,
-      ageDays: null,
-      isLowerBound: false,
-      signaturesScanned: 0,
-      error: "history unavailable",
-    },
     marketData: {
       available: false,
       pairs: [],
@@ -272,40 +264,6 @@ describe("evidence supports the exact claim each signal makes", () => {
     const entry = signal.evidence.find((e) => e.label === "Oldest pool created");
     expect(entry).toBeDefined();
     expect(Number.isNaN(Date.parse(entry!.value))).toBe(false);
-  });
-
-  it("token-age evidence distinguishes an exact age from a truncated scan", () => {
-    const exact = signalById(
-      makeInput({
-        tokenAge: {
-          available: true,
-          oldestSignatureAt: Date.now() - 400 * 24 * 60 * 60 * 1000,
-          ageDays: 400,
-          isLowerBound: false,
-          signaturesScanned: 120,
-        },
-      }),
-      "mint-age",
-    );
-    expect(exact.status).toBe("ok");
-    expect(exact.evidence.find((e) => e.label === "Precision")?.value).toMatch(/exact/i);
-
-    const truncated = signalById(
-      makeInput({
-        tokenAge: {
-          available: true,
-          oldestSignatureAt: Date.now() - 60 * 60 * 1000,
-          ageDays: 0.04,
-          isLowerBound: true,
-          signaturesScanned: 2000,
-        },
-      }),
-      "mint-age",
-    );
-    expect(truncated.status).toBe("unavailable");
-    expect(
-      truncated.evidence.find((e) => e.label === "Reached start of history")?.value,
-    ).toBe("no");
   });
 
   it("trading-activity evidence shows both inputs to the turnover ratio", () => {

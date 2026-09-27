@@ -34,7 +34,7 @@ const LANES: { title: string; question: string }[] = [
   },
   {
     title: "Maturity",
-    question: "How long have the token and its market actually existed?",
+    question: "How long has the oldest measured liquidity pool existed?",
   },
 ];
 
@@ -46,7 +46,7 @@ export default function SignalLanes() {
           What gets checked
         </h2>
         <p className="text-[11px]" style={{ color: "var(--ink-faint)" }}>
-          Five dimensions · 14 deterministic signals
+          Five dimensions · 13 deterministic signals
         </p>
       </Reveal>
 

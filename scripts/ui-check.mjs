@@ -86,6 +86,13 @@ for (const viewport of VIEWPORTS) {
     .waitFor({ state: "visible", timeout: 90_000 });
 
   check(true, "report renders after analysis");
+  check(apiReport.signals.length === 13 && apiReport.totalWeight === 152,
+    "report has 13 signals and total signal weight 152");
+  const maturity = apiReport.signals.filter(s => s.category === "Maturity");
+  check(maturity.length === 1 && maturity[0].id === "pool-maturity" && maturity[0].maxPoints === 12,
+    "Pool Age is the only maturity signal, with its existing weight");
+  check(!(await page.locator("body").innerText()).includes("Token Age"), "obsolete age label is absent from the UI");
+  check(await page.getByText("Pool Age", { exact: true }).count() > 0, "Pool Age appears in the report");
   check(await page.locator("[data-market-status]").getAttribute("data-market-status") === apiReport.market.status,
     "hero explicitly states the API market validation state");
   check(apiReport.market.priceUsd === apiReport.overview.priceUsd, "hero and snapshot use one canonical price");
@@ -246,11 +253,15 @@ for (const viewport of VIEWPORTS) {
 
   // An unmeasured signal must not offer "Inspect evidence" — that would imply
   // a measurement exists.
-  const unmeasuredHeading = page.getByRole("heading", { name: /Could not be measured/i });
-  if ((await unmeasuredHeading.count()) > 0) {
+  const unmeasured = apiReport.signals.filter(s => s.status === "unavailable");
+  const coverageSection = page.locator("#unmeasured");
+  check((await coverageSection.count() > 0) === (unmeasured.length > 0), "coverage section follows actual missing measurements");
+  if (unmeasured.length > 0) {
     check(
-      (await page.getByRole("button", { name: /Why not measured/i }).count()) > 0,
-      "unmeasured signals offer 'Why not measured', not 'Inspect evidence'",
+      (await coverageSection.getByRole("button", { name: /Why not measured/i }).count()) ===
+        unmeasured.filter(s => s.evidence.length > 0).length &&
+        (await coverageSection.getByRole("button", { name: /Inspect evidence/i }).count()) === 0,
+      "unmeasured signals offer details only when evidence exists, never 'Inspect evidence'",
     );
   }
 

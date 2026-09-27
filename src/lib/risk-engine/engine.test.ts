@@ -4,7 +4,7 @@ import { RULES, buildRiskReport, classifyScore } from "./engine";
 import { classify, classifyDescending, pointsFor, type Band } from "./helpers";
 import type { AnalysisInput } from "./input";
 import type { DataSourceStatus, TokenOverview } from "./types";
-import { DAY, makeInput, pair } from "./test-fixtures";
+import { makeInput, pair } from "./test-fixtures";
 
 /**
  * The risk engine is pure: every rule is a function of fetched data to a
@@ -353,6 +353,45 @@ describe("market activity rules", () => {
 });
 
 describe("maturity rules", () => {
+  it("counts the existing measured pool age once in scoring and coverage", () => {
+    const report = build(makeInput());
+    const maturity = report.signals.filter((s) => s.category === "Maturity");
+    expect(report.signals).toHaveLength(13);
+    expect(maturity).toHaveLength(1);
+    expect(maturity[0]).toMatchObject({
+      id: "pool-maturity", label: "Pool Age", status: "ok", maxPoints: 12,
+    });
+    expect(report.totalWeight).toBe(152);
+    expect(report.availableWeight).toBe(152);
+    expect(report.coveragePercent).toBe(100);
+    expect(report.categories.find((c) => c.category === "Maturity")).toMatchObject({
+      signalCount: 1, maxPoints: 12, weight: 20,
+    });
+  });
+
+  it("excludes only the existing pool-age weight when its timestamp is missing", () => {
+    const input = makeInput();
+    const report = build(makeInput({
+      marketData: {
+        ...input.marketData,
+        pairs: input.marketData.pairs.map((p) => ({ ...p, pairCreatedAt: null })),
+      },
+    }));
+    const missing = report.signals.filter((s) => s.status === "unavailable");
+    expect(missing).toHaveLength(1);
+    expect(missing[0]).toMatchObject({
+      id: "pool-maturity", label: "Pool Age", maxPoints: 12, points: 0,
+    });
+    expect(report.signals).toHaveLength(13);
+    expect(report.totalWeight).toBe(152);
+    expect(report.availableWeight).toBe(140);
+    expect(report.coveragePercent).toBe(Math.round(140 / 152 * 100));
+    expect(report.categories.find((c) => c.category === "Maturity")).toMatchObject({
+      signalCount: 1, maxPoints: 0, percent: null, weight: 20,
+    });
+    expect(report.warnings.join(" ")).toContain("1 of 13 signals could not be measured (Pool Age)");
+  });
+
   it("flags a brand-new pool as critical", () => {
     const signal = signalById(
       makeInput({
@@ -366,40 +405,6 @@ describe("maturity rules", () => {
     expect(signal.severity).toBe("critical");
   });
 
-  it("reports token age as unmeasured when history was truncated", () => {
-    // Regression guard: a busy token's newest 2000 signatures say nothing about
-    // its age, and must never be read as "minutes old".
-    const signal = signalById(
-      makeInput({
-        tokenAge: {
-          available: true,
-          oldestSignatureAt: Date.now() - 60 * 60 * 1000,
-          ageDays: 0.04,
-          isLowerBound: true,
-          signaturesScanned: 2000,
-        },
-      }),
-      "mint-age",
-    );
-    expect(signal.status).toBe("unavailable");
-    expect(signal.points).toBe(0);
-  });
-
-  it("scores an exactly-resolved young mint as critical", () => {
-    const signal = signalById(
-      makeInput({
-        tokenAge: {
-          available: true,
-          oldestSignatureAt: Date.now() - 2 * DAY,
-          ageDays: 2,
-          isLowerBound: false,
-          signaturesScanned: 42,
-        },
-      }),
-      "mint-age",
-    );
-    expect(signal.severity).toBe("critical");
-  });
 });
 
 describe("report aggregation", () => {
@@ -435,13 +440,6 @@ describe("report aggregation", () => {
           topHolderShare: 0.6,
           top10Share: 0.95,
           next9Share: 0.35,
-        },
-        tokenAge: {
-          available: true,
-          oldestSignatureAt: Date.now() - 0.5 * DAY,
-          ageDays: 0.5,
-          isLowerBound: false,
-          signaturesScanned: 30,
         },
         marketData: {
           ...makeInput().marketData,
@@ -489,14 +487,6 @@ describe("report aggregation", () => {
           topHolderShare: null,
           top10Share: null,
           next9Share: null,
-          error: "unavailable",
-        },
-        tokenAge: {
-          available: false,
-          oldestSignatureAt: null,
-          ageDays: null,
-          isLowerBound: false,
-          signaturesScanned: 0,
           error: "unavailable",
         },
         marketData: {

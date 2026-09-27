@@ -90,15 +90,9 @@ Point at **Token-2022 Extensions**:
 
 Scroll to **Could not be measured**.
 
-> "Token Age couldn't be determined. There's no RPC method for 'when was this
-> account created', so we walk signature history backwards — and a token this
-> busy has more history than we can scan.
->
-> The naive version takes the oldest signature it fetched and calls that the
-> creation date, which would brand USDC as four minutes old. We say 'not
-> measured' instead, drop that weight out of the denominator, and show you the
-> coverage figure. A *brand new* token resolves exactly, which is the case that
-> actually matters.
+> "Pool Age uses the oldest independently corroborated liquidity-pool timestamp.
+> When that timestamp is missing, the signal says not measured and its weight
+> is excluded from scoring. When it is measurable, its existing age bands apply.
 >
 > Missing data never makes a token look safer here. That's the whole design."
 
@@ -113,7 +107,7 @@ Click **USDC** if there's time:
 
 ## 5 · Close (15 seconds)
 
-> "Fourteen deterministic rules, every threshold published in METHODOLOGY.md.
+> "Thirteen deterministic rules, every threshold published in METHODOLOGY.md.
 > Same input, same score, every time. Next.js and TypeScript, no API keys, no
 > database, deploys to Vercel in one command.
 >

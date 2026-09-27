@@ -120,13 +120,6 @@ export function makeInput(overrides: Partial<AnalysisInput> = {}): AnalysisInput
       top10Share: 0.1,
       next9Share: 0.08,
     },
-    tokenAge: {
-      available: true,
-      oldestSignatureAt: Date.now() - 500 * DAY,
-      ageDays: 500,
-      isLowerBound: false,
-      signaturesScanned: 120,
-    },
     marketData: {
       available: true,
       name: "Test Token",
@@ -215,13 +208,6 @@ export const ARCHETYPES = {
         next9Share: 0.4331,
         top10Share: 0.806,
       },
-      tokenAge: {
-        available: true,
-        oldestSignatureAt: Date.now() - 1.2 * DAY,
-        ageDays: 1.2,
-        isLowerBound: false,
-        signaturesScanned: 300,
-      },
       marketData: {
         ...makeInput().marketData,
         pairs: [
@@ -257,13 +243,6 @@ export const ARCHETYPES = {
         topHolderShare: 0.6,
         next9Share: 0.38,
         top10Share: 0.98,
-      },
-      tokenAge: {
-        available: true,
-        oldestSignatureAt: Date.now() - 0.5 * DAY,
-        ageDays: 0.5,
-        isLowerBound: false,
-        signaturesScanned: 30,
       },
       marketData: {
         ...makeInput().marketData,

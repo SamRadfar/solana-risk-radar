@@ -1,7 +1,6 @@
 import type { MintInfo } from "../solana/mint";
 import type { OnChainMetadata } from "../solana/metadata";
 import type { HolderData } from "../solana/holders";
-import type { TokenAge } from "../solana/age";
 import type { MarketData } from "../market/types";
 import type { LiquiditySafety } from "./types";
 
@@ -11,7 +10,6 @@ export interface AnalysisInput {
   mintInfo: MintInfo;
   metadata: OnChainMetadata;
   holderData: HolderData;
-  tokenAge: TokenAge;
   marketData: MarketData;
   /**
    * Verified LP lock and burn state.

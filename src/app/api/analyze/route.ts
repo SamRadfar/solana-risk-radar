@@ -8,7 +8,6 @@ import {
 } from "@/lib/solana/mint";
 import { getOnChainMetadata } from "@/lib/solana/metadata";
 import { getHolderData } from "@/lib/solana/holders";
-import { getTokenAge } from "@/lib/solana/age";
 import { hasPrivateEndpoint } from "@/lib/solana/rpc";
 import {
   marketCap,
@@ -87,7 +86,7 @@ export async function GET(request: NextRequest) {
   // Independent lookups run concurrently. Each already degrades to an
   // "unavailable" result internally, so one slow provider cannot fail the
   // report — it only reduces coverage.
-  const [metadata, holderData, tokenAge, liquiditySafety] = await Promise.all([
+  const [metadata, holderData, liquiditySafety] = await Promise.all([
     getOnChainMetadata(mintInfo).catch(() => ({
       name: null,
       symbol: null,
@@ -98,7 +97,6 @@ export async function GET(request: NextRequest) {
       metadataAccount: null,
     })),
     getHolderData(mintInfo),
-    getTokenAge(mintAddress),
     getLiquiditySafety(
       marketData.available ? pairsByLiquidity(marketData) : [],
       marketData.available ? totalLiquidity(marketData) : null,
@@ -160,13 +158,6 @@ export async function GET(request: NextRequest) {
       name: p.provider, detail: p.status + ": " + (p.priceUsd === null ? p.errors.join("; ") || "No reconciled price" : String(p.priceUsd)),
       ok: p.status === "usable",
     })),
-    {
-      name: "Mint history",
-      detail: tokenAge.available
-        ? `${tokenAge.signaturesScanned} signatures scanned`
-        : (tokenAge.error ?? "Unavailable"),
-      ok: tokenAge.available,
-    },
   ];
 
   const report = buildRiskReport(
@@ -175,7 +166,6 @@ export async function GET(request: NextRequest) {
       mintInfo,
       metadata,
       holderData,
-      tokenAge,
       marketData,
       liquiditySafety,
     },

@@ -40,7 +40,7 @@ import {
   tradeImbalanceRule,
   tradingActivityRule,
 } from "./rules/market";
-import { mintAgeRule, poolMaturityRule } from "./rules/maturity";
+import { poolMaturityRule } from "./rules/maturity";
 
 /**
  * The deterministic scoring engine.
@@ -69,7 +69,6 @@ export const RULES: RiskRule[] = [
   priceVolatilityRule,
   // Maturity — how long any of this has existed.
   poolMaturityRule,
-  mintAgeRule,
 ];
 
 /**
