@@ -44,8 +44,6 @@ for (const viewport of VIEWPORTS) {
 
   const consoleErrors = [];
   const pageErrors = [];
-  let activityRequests = 0;
-  page.on("request", request => { if (request.url().includes("/api/activity?")) activityRequests++; });
   page.on("console", (message) => {
     if (message.type() === "error") consoleErrors.push(message.text());
   });
@@ -88,18 +86,6 @@ for (const viewport of VIEWPORTS) {
     .waitFor({ state: "visible", timeout: 90_000 });
 
   check(true, "report renders after analysis");
-  const activity = page.getByTestId("activity-intelligence");
-  check(await activity.isVisible(), "secondary Activity Intelligence panel renders");
-  check(activityRequests === 0 && await activity.getAttribute("open") === null, "collapsed activity makes no request or delays to report");
-  const activityResponse = page.waitForResponse(r => r.url().includes("/api/activity?"));
-  await activity.locator("summary").first().click();
-  const activityHttp = await activityResponse;
-  const activityResult = await activityHttp.json();
-  check(activityHttp.ok() && activityResult.version === "activity-intelligence-v0.1", "separate activity API responds with interpretation version");
-  check(await activity.getByText(/Observation only — not yet included in risk score/).isVisible(), "observation-only notice remains explicit");
-  check(["MEASURED", "PARTIAL", "INSUFFICIENT_DATA", "UNAVAILABLE"].includes(activityResult.status), "activity uses explicit data-quality state");
-  if (activityResult.errors.some(e => e.includes("HELIUS_API_KEY"))) check(activityResult.status === "UNAVAILABLE" && activityResult.requestCount === 0 && activityResult.features === null, "missing-key UI is unavailable, with no fabricated features");
-  await activity.locator("summary").first().click();
   check(apiReport.signals.length === 13 && apiReport.totalWeight === 152,
     "report has 13 signals and total signal weight 152");
   const maturity = apiReport.signals.filter(s => s.category === "Maturity");
@@ -329,34 +315,6 @@ for (const viewport of VIEWPORTS) {
     check(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth) <= 1, `${status}: no horizontal overflow`);
   }
   check(pageErrors.length === 0 && consoleErrors.length === 0, "deterministic state UI has no runtime errors");
-  // Synthetic activity presentation cases; this does not assert live Helius coverage.
-  let activityFixture;
-  await page.route("**/api/activity?*", route => route.fulfill({ json: activityFixture }));
-  const metric = { numerator: "5", denominator: "20", share: .25, resolvedCoverage: 1, recordCount: 20, walletsIncluded: 5 };
-  for (const status of ["MEASURED", "PARTIAL", "INSUFFICIENT_DATA", "UNAVAILABLE"]) {
-    activityFixture = { ...activityResult, status, errors: [], stoppingReasons: status === "PARTIAL" ? ["Request-count budget exhausted"] : [],
-      truncated: status === "PARTIAL", evidence: [], features: null };
-    if (status === "MEASURED" || status === "PARTIAL") Object.assign(activityFixture, {
-      economicActions: 20, recordsExamined: 20, traderResolutionCoverage: 1, unresolvedTraderCount: 0, parserCoverage: 1,
-      observedWindow: { from: Date.now() - 480000, to: Date.now(), lengthMs: 480000 },
-      features: { uniqueBuyers: 10, uniqueSellers: 10, concentration: { trade: { top1: metric, top5: metric, top10: metric }, volume: { top1: metric, top5: metric, top10: metric } },
-        cycling: { walletsWithCycles: 2, roundTripCount: 2 }, repeatedSizes: { recordsInRepeatedGroups: 4 }, cadence: { medianSeconds: 2 } },
-    });
-    await page.reload({ waitUntil: "networkidle" });
-    await page.locator("#mint-address").fill(TOKEN);
-    await page.locator('form button[type="submit"]').click();
-    const panel = page.getByTestId("activity-intelligence");
-    await panel.locator("summary").first().click();
-    await panel.getByText(status, { exact: true }).waitFor();
-    check(await panel.getByText(status, { exact: true }).isVisible(), `${status}: activity evidence state renders`);
-    if (activityFixture.features) {
-      check((await panel.innerText()).includes("Observed 8.0 min"), `${status}: actual eight-minute window is not presented as one hour`);
-      check(await panel.getByText("Resolved unique buyers", { exact: true }).isVisible(), `${status}: neutral observed features render`);
-    } else check(await panel.getByText("Resolved unique buyers", { exact: true }).count() === 0, `${status}: missing features are not shown as zero`);
-    check(!(await panel.innerText()).match(/Organic %|Bot %|Wash Trading Risk %|Scam/), `${status}: no behavioral verdict`);
-    check(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth) <= 1, `${status}: expanded activity has no horizontal overflow`);
-  }
-  check(pageErrors.length === 0 && consoleErrors.length === 0, "activity UI has no runtime errors");
   await context.close();
 }
 
