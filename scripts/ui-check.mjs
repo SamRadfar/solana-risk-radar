@@ -95,7 +95,7 @@ for (const viewport of VIEWPORTS) {
   await activity.locator("summary").first().click();
   const activityHttp = await activityResponse;
   const activityResult = await activityHttp.json();
-  check(activityHttp.ok() && activityResult.version === "activity-intelligence-v0.1", "separate activity API responds with interpretation version");
+  check(activityHttp.ok() && activityResult.version === "activity-intelligence-v0.2", "separate activity API responds with interpretation version");
   check(await activity.getByText(/Observation only — not yet included in risk score/).isVisible(), "observation-only notice remains explicit");
   check(["MEASURED", "PARTIAL", "INSUFFICIENT_DATA", "UNAVAILABLE"].includes(activityResult.status), "activity uses explicit data-quality state");
   if (activityResult.errors.some(e => e.includes("HELIUS_API_KEY"))) check(activityResult.status === "UNAVAILABLE" && activityResult.requestCount === 0 && activityResult.features === null, "missing-key UI is unavailable, with no fabricated features");

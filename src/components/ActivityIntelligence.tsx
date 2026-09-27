@@ -35,18 +35,22 @@ export default function ActivityIntelligence({ mint }: { mint: string }) {
       {error && <p role="status">Unavailable: {error}</p>}
       {result && <div className="mt-3 space-y-3 break-words">
         <p><strong>{result.status}</strong> · Requested 60 min · Observed {result.observedWindow ? `${(result.observedWindow.lengthMs / 60000).toFixed(1)} min` : "unavailable"} · {result.economicActions} economic actions · {percent(result.traderResolutionCoverage)} trader resolution</p>
-        <p>{result.truncated ? "Truncated sample" : "Bounded sample"} · {result.recordsExamined} unique records examined · {percent(result.parserCoverage)} eligible-record parse coverage · {result.unresolvedTraderCount} unresolved actions</p>
-        {features && <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {[
-            ["Resolved unique buyers", features.uniqueBuyers], ["Resolved unique sellers", features.uniqueSellers],
-            ["Top 1 trade share", share(features.concentration.trade.top1)], ["Top 5 trade share", share(features.concentration.trade.top5)],
-            ["Top 10 trade share", share(features.concentration.trade.top10)], ["Top 1 token-volume share", share(features.concentration.volume.top1)],
-            ["Top 5 token-volume share", share(features.concentration.volume.top5)], ["Top 10 token-volume share", share(features.concentration.volume.top10)],
-            ["Addresses with observed cycles", features.cycling.walletsWithCycles], ["Equal-size observed round-trip pairs", features.cycling.roundTripCount],
-            ["Records in repeated-size groups", features.repeatedSizes.recordsInRepeatedGroups], ["Median distinct-slot trade gap", features.cadence.medianSeconds === null ? "Unavailable" : `${features.cadence.medianSeconds}s`],
-          ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd style={{ color: "var(--ink)" }}>{value}</dd></div>)}
+        <p>{result.truncated ? "Truncated sample" : "Bounded sample"} · {result.recordsExamined} unique successful records examined · {percent(result.parserCoverage)} eligible-record parse coverage · {result.unresolvedTraderCount} unresolved actions · failed transactions filtered server-side</p>
+        {features && result.metrics && <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {([
+            ["participants", "Resolved unique buyers", features.uniqueBuyers], ["participants", "Resolved unique sellers", features.uniqueSellers],
+            ["concentration", "Top 1 trade share", features.concentration && share(features.concentration.trade.top1)], ["concentration", "Top 5 trade share", features.concentration && share(features.concentration.trade.top5)],
+            ["concentration", "Top 10 trade share", features.concentration && share(features.concentration.trade.top10)], ["concentration", "Top 1 token-volume share", features.concentration && share(features.concentration.volume.top1)],
+            ["concentration", "Top 5 token-volume share", features.concentration && share(features.concentration.volume.top5)], ["concentration", "Top 10 token-volume share", features.concentration && share(features.concentration.volume.top10)],
+            ["cycling", "Addresses with observed cycles", features.cycling?.walletsWithCycles], ["cycling", "Equal-size observed round-trip pairs", features.cycling?.roundTripCount],
+            ["repeatedSizes", "Records in repeated-size groups", features.repeatedSizes?.recordsInRepeatedGroups], ["cadence", "Median distinct-slot trade gap", features.cadence && (features.cadence.medianSeconds === null ? "Unavailable" : `${features.cadence.medianSeconds}s`)],
+          ] as const).map(([metric, label, value]) => {
+            const m = result.metrics![metric];
+            return <div key={label}><dt>{label} <span className="text-xs">({m.status}{m.basis === "resolved-trader-subset" ? ` · resolved subset ${m.sampleSize} actions, ${percent(m.actionCoverage)} of actions` : ""})</span></dt>
+              <dd style={{ color: "var(--ink)" }}>{value === null || value === undefined ? `Withheld: ${m.reasons.join("; ")}` : value}</dd></div>;
+          })}
         </dl>}
-        <p>Concentration describes resolved actions in this sample. Addresses are not independent people. Observed cycling can reflect arbitrage or market making.</p>
+        <p>Trader-dependent metrics describe only resolved actions in this sample, which can differ from unresolved (often routed) activity. Addresses are not independent people. Observed cycling can reflect arbitrage or market making.</p>
         <p>Fetched {new Date(result.fetchedAt).toISOString()} · {result.version} · {result.requestCount} provider requests · {result.elapsedMs} ms</p>
         <p>Pools: {result.poolsCovered.map(p => `${p.venue} (${p.address})`).join(", ") || "None measured"}</p>
         {[...result.errors, ...result.stoppingReasons.filter(r => !result.errors.includes(r))].map(reason => <p key={reason}>{reason}</p>)}

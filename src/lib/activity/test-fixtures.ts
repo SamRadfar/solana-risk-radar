@@ -10,13 +10,15 @@ export const POOLS: ActivityPool[] = [0, 1].map(i => ({
   address: `pool-${i}`, program: "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",
   venue: "Raydium CPMM", baseMint: MINT, quoteMint: QUOTE,
 }));
-function instructionData(name: string): string {
-  const bytes = createHash("sha256").update(`global:${name}`).digest().subarray(0, 8);
+export function encodeBase58(bytes: Uint8Array): string {
   const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  let n = BigInt(`0x${bytes.toString("hex")}`), encoded = "";
+  let n = BigInt(`0x${Buffer.from(bytes).toString("hex") || "0"}`), encoded = "";
   while (n > BigInt(0)) { encoded = alphabet[Number(n % BigInt(58))] + encoded; n /= BigInt(58); }
   for (const byte of bytes) { if (byte !== 0) break; encoded = "1" + encoded; }
   return encoded;
+}
+function instructionData(name: string): string {
+  return encodeBase58(createHash("sha256").update(`global:${name}`).digest().subarray(0, 8));
 }
 export function transaction(id: number, options: { wallet?: string; side?: "BUY" | "SELL"; amount?: string; routed?: boolean; pool?: number; unresolved?: boolean; failed?: boolean; parserError?: boolean; sameSlot?: number } = {}) {
   const owner = options.wallet ?? `wallet-${id}`, side = options.side ?? (id % 2 ? "SELL" : "BUY"), amount = BigInt(options.amount ?? "1000");
@@ -43,8 +45,10 @@ export function transaction(id: number, options: { wallet?: string; side?: "BUY"
     },
   };
 }
-export function mockProvider(rows: ReturnType<typeof transaction>[], options: { pools?: number; rateLimit?: boolean; endless?: boolean; requestError?: boolean } = {}) {
+/** Mock of the three provider calls. Listing honours `filters.status` unless `ignoreStatusFilter`. */
+export function mockProvider(rows: ReturnType<typeof transaction>[], options: { pools?: number; rateLimit?: boolean; requestError?: boolean; ignoreStatusFilter?: boolean } = {}) {
   const calls: { url: string; body: Record<string, unknown> }[] = [];
+  const bySignature = new Map(rows.map(row => [row.signature, row]));
   const fetcher: typeof fetch = async (input, init) => {
     const url = String(input), body = init?.body ? JSON.parse(String(init.body)) : {};
     calls.push({ url, body });
@@ -52,8 +56,16 @@ export function mockProvider(rows: ReturnType<typeof transaction>[], options: { 
     if (url.includes("dexscreener")) return Response.json(POOLS.slice(0, options.pools ?? 1).map(p => ({ chainId: "solana", pairAddress: p.address, baseToken: { address: MINT }, quoteToken: { address: QUOTE }, liquidity: { usd: 100 } })));
     if (body.method === "getMultipleAccounts") return Response.json({ result: { value: POOLS.slice(0, options.pools ?? 1).map(p => ({ owner: p.program, executable: false })) } });
     if (options.rateLimit) return new Response("limited", { status: 429 });
-    const start = Number(body.paginationToken ?? 0), end = start + Number(body.limit);
-    return Response.json({ data: rows.slice(start, end), ...(end < rows.length || options.endless ? { paginationToken: String(end) } : {}) });
+    if (body.method === "getTransactionsForAddress") {
+      const [address, config] = body.params;
+      const data = rows.filter(row => row.rawTransaction.transaction.message.accountKeys.includes(address))
+        .filter(row => options.ignoreStatusFilter || config.filters?.status !== "succeeded" || row.parsed.transactionStatus === "OK")
+        .sort((a, b) => b.parsed.slot - a.parsed.slot).slice(0, config.limit)
+        .map(row => ({ signature: row.signature, slot: row.parsed.slot, transactionIndex: 0, blockTime: row.parsed.blockTime, err: row.rawTransaction.meta.err, confirmationStatus: "finalized" }));
+      return Response.json({ jsonrpc: "2.0", id: 1, result: { data, ...(data.length === config.limit ? { paginationToken: "next" } : {}) } });
+    }
+    if (url.includes("parsed-events/transactions")) return Response.json((body.transactions as string[]).map(signature => bySignature.get(signature)));
+    return new Response("unexpected", { status: 500 });
   };
   return { fetcher, calls };
 }

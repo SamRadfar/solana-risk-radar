@@ -24,9 +24,18 @@ export interface ActivityTrade {
   quoteMint: string | null;
   quoteDecimals: number | null;
   amountProvenance: string;
+  /** Non-root SOL transfers accepted as value-neutral to the requested-token interpretation. */
+  ancillarySolTransfers: AncillarySolTransfer[];
   economicActionId: string;
   source: "helius-parsed-events";
   rawEvidenceReference: string;
+}
+export interface AncillarySolTransfer {
+  kind: "zero-value" | "self-wrap" | "tip";
+  lamports: string;
+  recipient: string;
+  /** Tip service for documented tip accounts; null otherwise. */
+  service: string | null;
 }
 export interface ShareMetric {
   numerator: string;
@@ -36,15 +45,16 @@ export interface ShareMetric {
   recordCount: number;
   walletsIncluded: number;
 }
+/** Trader-dependent groups are null when the resolved subset is not eligible (see `metrics`). */
 export interface ActivityFeatures {
-  uniqueBuyers: number;
-  uniqueSellers: number;
-  concentration: {
+  uniqueBuyers: number | null;
+  uniqueSellers: number | null;
+  concentration: null | {
     basis: "resolved economic actions; volume in requested-token raw units";
     trade: { top1: ShareMetric; top5: ShareMetric; top10: ShareMetric };
     volume: { top1: ShareMetric; top5: ShareMetric; top10: ShareMetric };
   };
-  cycling: {
+  cycling: null | {
     walletsWithCycles: number;
     cycleCount: number;
     buySellTransitions: number;
@@ -54,9 +64,22 @@ export interface ActivityFeatures {
     ambiguousSameSlotPairs: number;
     definition: string;
   };
-  inventory: { trader: string; grossTradedRaw: string; netSwapFlowRaw: string; actualInventoryChangeRaw: null }[];
-  repeatedSizes: { repeatedGroups: number; recordsInRepeatedGroups: number; eligibleRecords: number; basis: string };
-  cadence: { distinctSlots: number; sameSlotActions: number; intervalCount: number; minSeconds: number | null; medianSeconds: number | null; maxSeconds: number | null; precision: string };
+  inventory: null | { trader: string; grossTradedRaw: string; netSwapFlowRaw: string; actualInventoryChangeRaw: null }[];
+  repeatedSizes: null | { repeatedGroups: number; recordsInRepeatedGroups: number; eligibleRecords: number; basis: string };
+  cadence: null | { distinctSlots: number; sameSlotActions: number; intervalCount: number; minSeconds: number | null; medianSeconds: number | null; maxSeconds: number | null; precision: string };
+}
+export type ActivityMetricName = "repeatedSizes" | "cadence" | "participants" | "concentration" | "cycling" | "inventory";
+export interface ActivityMetricEligibility {
+  status: ActivityStatus;
+  basis: "all-normalized-actions" | "resolved-trader-subset";
+  /** Actions in the metric's basis. */
+  sampleSize: number;
+  requiredSampleSize: number;
+  /** Basis actions / all normalized actions. */
+  actionCoverage: number | null;
+  /** Basis requested-token volume / all normalized requested-token volume. */
+  volumeCoverage: number | null;
+  reasons: string[];
 }
 export interface ActivityEvidenceResult {
   version: string;
@@ -70,7 +93,13 @@ export interface ActivityEvidenceResult {
   fetchedAt: number;
   expiresAt: number;
   requestCount: number;
+  bytesReceived: number;
   elapsedMs: number;
+  /** Failed transactions are removed server-side by the signature listing (`status: succeeded`). */
+  failedTransactionFilter: "server-side-succeeded-only";
+  signaturesListed: number;
+  /** Listed successful signatures not fetched because of the common listing frontier or parse budgets. */
+  signaturesNotFetched: number;
   recordsReceived: number;
   recordsExamined: number;
   duplicateRecords: number;
@@ -90,6 +119,7 @@ export interface ActivityEvidenceResult {
   stoppingReasons: string[];
   errors: string[];
   exclusions: Record<string, number>;
+  metrics: Record<ActivityMetricName, ActivityMetricEligibility> | null;
   features: ActivityFeatures | null;
   evidence: ActivityTrade[];
   limitations: string[];

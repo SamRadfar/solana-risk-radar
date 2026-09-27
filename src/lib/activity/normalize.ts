@@ -1,7 +1,14 @@
-import { SUPPORTED_PROGRAMS } from "./policy";
+import { PublicKey } from "@solana/web3.js";
+import { SUPPORTED_PROGRAMS, TIP_ACCOUNTS } from "./policy";
 import { decodeBase58 } from "../solana/address";
 import { createHash } from "node:crypto";
-import type { ActivityPool, ActivityTrade } from "./types";
+import type { ActivityPool, ActivityTrade, AncillarySolTransfer } from "./types";
+
+const SYSTEM_PROGRAM = "11111111111111111111111111111111";
+const TOKEN_PROGRAMS = ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"];
+const ASSOCIATED_TOKEN_PROGRAM = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
+export const WRAPPED_SOL = "So11111111111111111111111111111111111111112";
+const SYSTEM_TRANSFER = 2, SYNC_NATIVE = 17;
 
 export function object(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -15,6 +22,46 @@ export function rawAmount(value: unknown): bigint | null {
   return integer(value) !== null ? BigInt(value as number) : null;
 }
 type Outcome = { kind: "trade"; trade: ActivityTrade } | { kind: "failed" | "unparsed" | "excluded"; reason: string };
+type Instruction = Record<string, unknown>;
+
+function wrappedSolAccount(owner: string, tokenProgram: string): string | null {
+  try {
+    return PublicKey.findProgramAddressSync([new PublicKey(owner).toBuffer(), new PublicKey(tokenProgram).toBuffer(), new PublicKey(WRAPPED_SOL).toBuffer()],
+      new PublicKey(ASSOCIATED_TOKEN_PROGRAM))[0].toBase58();
+  } catch { return null; }
+}
+const executionOrder = (ix: Instruction) => Number(ix.instructionIndex) * 10_000 + (ix.innerInstructionIndex === null ? -1 : Number(ix.innerInstructionIndex));
+
+/** Classify one System Program instruction outside the swap root from raw bytes/accounts only.
+ * Accepted: zero-value transfers; signer self-wraps into its own derived WSOL ATA followed by
+ * sync_native; signer tips to documented block-builder tip accounts that take no other role.
+ * Anything else that can move lamports stays an unallocated transfer.
+ */
+function classifySystemInstruction(ix: Instruction, instructions: Instruction[], signers: Set<string>, tradeAccounts: Set<string>):
+  { kind: "neutral" } | { kind: "ancillary"; transfer: AncillarySolTransfer } | { kind: "unallocated" } {
+  const bytes = typeof ix.rawData === "string" ? decodeBase58(ix.rawData) : null;
+  if (!bytes || bytes.length < 4) return { kind: "unallocated" };
+  const data = Buffer.from(bytes);
+  if (data.readUInt32LE(0) !== SYSTEM_TRANSFER) return /transfer/i.test(String(ix.instructionName)) ? { kind: "unallocated" } : { kind: "neutral" };
+  const accounts = list(ix.rawAccounts).map(text);
+  const from = accounts[0], to = accounts[1];
+  if (data.length !== 12 || !from || !to) return { kind: "unallocated" };
+  const lamports = data.readBigUInt64LE(4);
+  if (lamports === BigInt(0)) return { kind: "ancillary", transfer: { kind: "zero-value", lamports: "0", recipient: to, service: null } };
+  if (!signers.has(from)) return { kind: "unallocated" };
+  const isSyncNative = (sync: Instruction) => {
+    const syncData = typeof sync.rawData === "string" ? decodeBase58(sync.rawData) : null;
+    return TOKEN_PROGRAMS.includes(String(sync.programId)) && list(sync.rawAccounts)[0] === to && executionOrder(sync) > executionOrder(ix) &&
+      syncData?.length === 1 && syncData[0] === SYNC_NATIVE;
+  };
+  if (TOKEN_PROGRAMS.some(program => wrappedSolAccount(from, program) === to) && instructions.some(isSyncNative)) {
+    return { kind: "ancillary", transfer: { kind: "self-wrap", lamports: lamports.toString(), recipient: to, service: null } };
+  }
+  if (TIP_ACCOUNTS[to] && !tradeAccounts.has(to) && !signers.has(to)) {
+    return { kind: "ancillary", transfer: { kind: "tip", lamports: lamports.toString(), recipient: to, service: TIP_ACCOUNTS[to] } };
+  }
+  return { kind: "unallocated" };
+}
 
 /** One transaction / one economic action only when there is one swap root.
  * CPI legs are evidence of that root, never independently counted user trades.
@@ -62,25 +109,46 @@ export function normalizeActivity(row: unknown, mint: string, pools: ActivityPoo
     ? { kind: "unparsed", reason: "Swap could not be bound to a supported identified pool" }
     : { kind: "excluded", reason: "No supported, identified pool swap instruction" };
   const roots = new Set(legs.map(l => l.ix.instructionIndex));
-  // Also reject another (possibly unsupported) swap root and unrelated token
-  // transfers: whole-transaction balance deltas cannot allocate these safely.
-  // get_account_data_size is the value-free Token CPI inside ATA creation (live Helius naming).
   const root = [...roots][0];
-  const otherEconomicInstruction = instructions.some(ix => ix.instructionIndex !== root &&
-    (object(ix.summary).type === "swap" || /transfer|mint_to|burn|liquidity/i.test(String(ix.instructionName)) ||
-      ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"].includes(String(ix.programId)) && !/initialize|close|sync_native|get_account_data_size/i.test(String(ix.instructionName))));
-  if (roots.size !== 1 || otherEconomicInstruction) return { kind: "unparsed", reason: "Multiple economic roots or unallocated transfers" };
+  if (roots.size !== 1) return { kind: "unparsed", reason: "Multiple economic roots or unallocated transfers" };
   const keys = staticKeys;
   const required = integer(object(message.header).numRequiredSignatures);
   if (required === null || required === 0 || required > keys.length || list(tx.signatures).length !== required) return { kind: "unparsed", reason: "Raw signer header is incomplete or inconsistent" };
-  const signers = new Set(keys.filter((k, i) => k && (required !== null ? i < required : object(list(message.accountKeys)[i]).signer === true)));
+  const signers = new Set(keys.filter((k, i): k is string => !!k && i < required));
+  const pre = list(meta.preTokenBalances).map(object), post = list(meta.postTokenBalances).map(object);
+  const rootAccounts = new Set(instructions.filter(ix => ix.instructionIndex === root).flatMap(ix => list(ix.rawAccounts)));
+  const balanceAccounts = [...pre, ...post].flatMap(b => [integer(b.accountIndex) !== null ? allKeys[Number(b.accountIndex)] : null, b.owner]);
+  const tradeAccounts = new Set([...rootAccounts, ...balanceAccounts, ...pools.map(p => p.address)].filter((a): a is string => typeof a === "string"));
+  // Also reject another (possibly unsupported) swap root and unrelated token
+  // transfers: whole-transaction balance deltas cannot allocate these safely.
+  // get_account_data_size is the value-free Token CPI inside ATA creation (live Helius naming).
+  // System Program instructions are classified from raw bytes, not by name.
+  const ancillarySolTransfers: AncillarySolTransfer[] = [];
+  let unallocatedSol = false;
+  const otherEconomicInstruction = instructions.some(ix => {
+    if (ix.instructionIndex === root) return false;
+    if (object(ix.summary).type === "swap") return true;
+    if (ix.programId === SYSTEM_PROGRAM) {
+      const classified = classifySystemInstruction(ix, instructions, signers, tradeAccounts);
+      if (classified.kind === "ancillary") ancillarySolTransfers.push(classified.transfer);
+      if (classified.kind === "unallocated") unallocatedSol = true;
+      return classified.kind === "unallocated";
+    }
+    return /transfer|mint_to|burn|liquidity/i.test(String(ix.instructionName)) ||
+      TOKEN_PROGRAMS.includes(String(ix.programId)) && !/initialize|close|sync_native|get_account_data_size/i.test(String(ix.instructionName));
+  });
+  if (otherEconomicInstruction) return { kind: "unparsed", reason: unallocatedSol
+    ? "Unallocated SOL transfer (not zero-value, a verified self-wrap or a documented tip account)" : "Multiple economic roots or unallocated transfers" };
+  // A self-wrap into a WSOL account that persists across the transaction adds lamports to its
+  // token balance outside the swap, so that account's WSOL delta is not swap flow.
+  const wrapped = new Set(ancillarySolTransfers.filter(t => t.kind === "self-wrap").map(t => t.recipient));
+  const wrapContaminated = [...pre, ...post].some(b => integer(b.accountIndex) !== null && wrapped.has(String(allKeys[Number(b.accountIndex)])));
   // A missing side cannot be assumed zero: new/closed token accounts need
   // instruction-scoped reconstruction, deferred to a future decoder version.
-  const pre = list(meta.preTokenBalances).map(object), post = list(meta.postTokenBalances).map(object);
   const mintDecimals = new Set([...pre, ...post].filter(b => b.mint === mint).map(b => integer(object(b.uiTokenAmount).decimals)));
   if (mintDecimals.size !== 1 || mintDecimals.has(null)) return { kind: "unparsed", reason: "Missing or inconsistent requested-token decimals" };
   const deltas = new Map<string, Map<string, { amount: bigint; decimals: number }>>();
-  let incomplete = false;
+  let incomplete = wrapContaminated;
   const indices = new Set([...pre, ...post].map(b => b.accountIndex));
   for (const index of indices) {
     const before = pre.find(b => b.accountIndex === index), after = post.find(b => b.accountIndex === index);
@@ -97,7 +165,6 @@ export function normalizeActivity(row: unknown, mint: string, pools: ActivityPoo
     assets.set(token, { amount: (previous?.amount ?? BigInt(0)) + afterAmount - beforeAmount, decimals });
     deltas.set(owner, assets);
   }
-  const rootAccounts = new Set(instructions.filter(ix => ix.instructionIndex === root).flatMap(ix => list(ix.rawAccounts)));
   const candidates = [...deltas].filter(([owner, assets]) => signers.has(owner) && rootAccounts.has(owner) && (assets.get(mint)?.amount ?? BigInt(0)) !== BigInt(0) &&
     !pools.some(p => p.address === owner || p.program === owner));
   const candidate = candidates.length === 1 ? candidates[0] : null;
@@ -126,6 +193,7 @@ export function normalizeActivity(row: unknown, mint: string, pools: ActivityPoo
     quoteMint: resolved && quote ? quote[0] : null,
     quoteDecimals: resolved && quote ? quote[1].decimals : null,
     amountProvenance: resolved ? "raw-transaction-token-balance-deltas" : "provider-root-swap-summary; unresolved owner",
+    ancillarySolTransfers,
     economicActionId: `${signature}:${root}`, source: "helius-parsed-events", rawEvidenceReference: `${snapshotId}:${signature}`,
   } };
 }
