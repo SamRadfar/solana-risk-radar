@@ -225,8 +225,8 @@ export default function VerdictHero({ report }: { report: RiskReport }) {
         </div>
 
         <p className="mt-5 text-xs" style={{ color: "var(--ink-secondary)" }} data-market-status={report.market.status}>
-          {{ validated: "Market price validated across providers.",
-            single_source: "Single-source market data — price and valuations withheld.",
+          {{ validated: `Validated · ${report.market.confidence} confidence`,
+            single_source: "Single source · Unverified indicative quote; excluded from risk scoring.",
             conflict: "Market data conflict — price and valuations withheld.",
             unavailable: "Market data unavailable — price and valuations withheld." }[report.market.status]}
         </p>
@@ -237,8 +237,8 @@ export default function VerdictHero({ report }: { report: RiskReport }) {
           style={{ borderTop: "1px solid var(--line)" }}
         >
           <Stat
-            label="Price"
-            value={overview.priceUsd !== null ? formatPrice(overview.priceUsd) : "—"}
+            label={report.market.contextualQuote ? "Indicative · unverified" : "Price"}
+            value={overview.priceUsd !== null ? formatPrice(overview.priceUsd) : report.market.contextualQuote ? formatPrice(report.market.contextualQuote.priceUsd) : "—"}
           />
           <Stat
             label="Market cap"

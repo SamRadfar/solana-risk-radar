@@ -4,10 +4,33 @@ import { getGeckoSnapshot, getGeckoReferences } from "./gecko-market";
 import { getPriceHistory } from "./geckoterminal";
 import { getMarketData } from "../market/service";
 import { validateMarket } from "../market/validation";
+import { marketJson } from "./market-http";
 const MINT="So11111111111111111111111111111111111111112";
 const USDC="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 afterEach(()=>vi.unstubAllGlobals());
 describe("provider network contracts",()=>{
+  it("one bounded retry recovers 429 and deduplicates concurrent reads",async()=>{
+    const mock=vi.fn().mockResolvedValueOnce(new Response("{}",{status:429}))
+      .mockImplementation(()=>Promise.resolve(new Response('{"ok":true}')));
+    vi.stubGlobal("fetch",mock);
+    const [a,b]=await Promise.all([marketJson("https://fixture.invalid/retry"),marketJson("https://fixture.invalid/retry")]);
+    expect(mock).toHaveBeenCalledTimes(2); expect(a).toBe(b);
+    expect(a.error).toBeNull(); expect(a.events[0]).toContain("429");
+    await marketJson("https://fixture.invalid/retry");
+    expect(mock).toHaveBeenCalledTimes(3); // no retained last-known-valid fallback
+  });
+  it("honours long Retry-After without hammering or blocking the analysis",async()=>{
+    const mock=vi.fn().mockResolvedValue(new Response("{}",{status:429,headers:{"retry-after":"60"}}));
+    vi.stubGlobal("fetch",mock);
+    const result=await marketJson("https://fixture.invalid/long");
+    expect(result.error).toContain("429"); expect(mock).toHaveBeenCalledTimes(1);
+  });
+  it("timeout retry is bounded and remains missing evidence",async()=>{
+    const mock=vi.fn().mockRejectedValue(new DOMException("timeout","TimeoutError"));
+    vi.stubGlobal("fetch",mock);
+    const result=await marketJson("https://fixture.invalid/timeout");
+    expect(result.body).toBeNull(); expect(result.error).toContain("timed out"); expect(mock).toHaveBeenCalledTimes(2);
+  });
   it("timeouts never become usable zero-price data",async()=>{
     vi.stubGlobal("fetch",vi.fn().mockRejectedValue(new DOMException("timeout","TimeoutError")));
     const [a,b]=await Promise.all([getDexScreenerSnapshot(MINT),getGeckoSnapshot(MINT)]);

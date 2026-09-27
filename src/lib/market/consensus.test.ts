@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("server-only", () => ({}));
 import captured from "./fixtures/jup-2026-09-27.json";
 import { normalizeDexScreener } from "../providers/dexscreener";
@@ -6,15 +6,16 @@ import { normalizeGeckoPools, normalizeGeckoToken } from "../providers/gecko-mar
 import { providerConsensus } from "./consensus";
 import { validateMarket, withHistory, compareMetric } from "./validation";
 import { normalizeHistory } from "../providers/geckoterminal";
-import { spotPrice, marketCap, fullyDilutedValuation, priceChange24h } from "./access";
+import { spotPrice, marketCap, fullyDilutedValuation, priceChange24h, contextualQuote, marketEvidenceFresh } from "./access";
 import { reportCacheKey, historyCacheKey, MARKET_ALGORITHM_VERSION, agrees, PRICE_AGREEMENT_TOLERANCE } from "./policy";
 import { priceVolatilityRule } from "../risk-engine/rules/market";
 import { makeInput } from "../risk-engine/test-fixtures";
 import { buildRiskReport } from "../risk-engine/engine";
-import { getCached, setCached } from "../cache";
+import { getCached, setCached, clearCache } from "../cache";
 import type { PoolObservation, ProviderSnapshot, MarketData } from "./types";
 
 const NOW = Date.parse(captured.capturedAt);
+beforeEach(clearCache);
 const MINT = "So11111111111111111111111111111111111111112";
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const OTHER = captured.mint;
@@ -32,6 +33,73 @@ function snap(provider = "a", observations = [row()], overrides: Partial<Provide
 }
 const run = (a = snap(), b = snap("b")) => validateMarket(MINT, [a,b], [], NOW, 2000000);
 const market = (v = run()): MarketData => ({ available: true, pairs: v.pairs, validation: v, name: null, symbol: null, imageUrl: null, websites: [], socials: [] });
+
+describe("trader availability without invented agreement", () => {
+  it.each(["HTTP 429", "timeout", "No pools"])("%s leaves one usable provider single-source", error => {
+    const v = run(snap(), snap("b", [], { available: false, errors: [error] }));
+    expect(v.status).toBe("single_source");
+    expect(contextualQuote(market(v))).toEqual({ priceUsd: 1, provider: "a", fetchedAt: NOW });
+    expect(spotPrice(market(v))).toBeNull();
+  });
+  it("two agreeing providers survive a third outage with medium confidence", () => {
+    const v = validateMarket(MINT, [snap(), snap("b"), snap("c", [], { available: false, errors: ["HTTP 429"] })], [], NOW, 2e6);
+    expect(v.status).toBe("validated"); expect(v.confidence).toBe("medium");
+    expect(v.price.value).toBe(1); expect(contextualQuote(market(v))).toBeNull();
+  });
+  it("a failed token endpoint does not poison two agreeing pool opinions", () => {
+    const v = run(snap(), snap("b", [row()], { errors: ["Token endpoint timeout"] }));
+    expect(v.status).toBe("validated"); expect(v.confidence).toBe("medium");
+  });
+  it("cap disagreement and unavailable history leave spot usable", () => {
+    const v = run(snap(), snap("geckoterminal", [row({ marketCap: 1.5e6 })]));
+    expect(v.marketCap.status).toBe("conflict"); expect(v.price.status).toBe("validated");
+    const checked = withHistory(v, { available: false, points: [], mint: MINT, pool: POOL,
+      side: "base", fetchedAt: NOW, sourceUrl: "https://fixture.invalid", error: "HTTP 429" }, NOW);
+    expect(checked.status).toBe("validated"); expect(checked.historyCheck.status).toBe("unavailable");
+  });
+  it.each([1.049, 1.051])("independent gap %s respects the unchanged 5 percent boundary", priceUsd => {
+    const v = run(snap(), snap("b", [row({ priceUsd })]));
+    expect(v.status).toBe(priceUsd < 1.05 ? "validated" : "conflict");
+  });
+  it("no-volume quotes are unavailable evidence; missing activity is not invented zero", () => {
+    const v = run(snap("a", [row({ volume24hUsd: 0, priceUsd: 5000 })]));
+    expect(v.status).toBe("single_source");
+    expect(run(snap("a", [row({ volume24hUsd: null, priceUsd: 5000 })])).status).toBe("conflict");
+  });
+  it("self-consistency never counts as independent corroboration", () => {
+    const a = snap("a", [row({ priceUsd: 5000, reportedCounterPriceUsd: 5000 })]);
+    expect(providerConsensus(a, [], NOW).status).toBe("usable");
+    expect(run(a).status).toBe("conflict");
+  });
+  it("measured zero volume survives independent spot confirmation, but inconsistent reserves cannot", () => {
+    const snapshots = ["a", "b"].map(provider => snap(provider, [row({ volume24hUsd: 0 })], {
+      token: { provider, mint: MINT, priceUsd: 1, marketCap: null, fetchedAt: NOW, sourceUrl: "https://fixture.invalid/spot" }
+    }));
+    const v = validateMarket(MINT, snapshots, [], NOW, 2e6);
+    expect(v.status).toBe("validated"); expect(v.volume24h.value).toBe(0); expect(v.liquidity.value).toBe(100000);
+    snapshots[0].observations[0].reportedCounterPriceUsd = 5000;
+    const bad = validateMarket(MINT, snapshots, [], NOW, 2e6);
+    expect(bad.status).toBe("validated"); expect(bad.liquidity.value).toBeNull();
+  });
+  it("fresh conflict replaces a previously validated cache entry; expired evidence is not reused", () => {
+    const key = reportCacheKey(MINT), valid = run();
+    setCached(key, valid);
+    expect(marketEvidenceFresh(valid, NOW + 90001)).toBe(false);
+    const conflict = run(snap(), snap("b", [row({ priceUsd: 5000 })]));
+    setCached(key, conflict);
+    expect(getCached<typeof conflict>(key)!.price.value).toBeNull();
+    expect(contextualQuote(market(conflict))).toBeNull();
+  });
+  it("single-source UI quote never enters price-dependent rules or overview", () => {
+    const input = makeInput(); input.marketData = market(run(snap(), snap("b", [], { available: false })));
+    const overview = { mint:MINT,name:null,symbol:null,decimals:9,supply:"1",supplyUi:2e6,supplyIsMeaningful:true,priceUsd:5000,marketCapUsd:5e9,imageUrl:null,tokenProgram:"spl-token",metadataSource:"none",websites:[],socials:[] };
+    const report = buildRiskReport(input, { overview, sources: [], elapsedMs: 0 });
+    expect(report.market.contextualQuote?.priceUsd).toBe(1);
+    expect(report.market.confidence).toBe("low"); expect(report.overview.priceUsd).toBeNull();
+    expect(report.market.priceUsd).toBeNull(); expect(report.market.marketCapUsd).toBeNull();
+    expect(report.signals.filter(s=>["Liquidity","Market Activity"].includes(s.category)).every(s=>s.status==="unavailable"&&s.points===0)).toBe(true);
+  });
+});
 
 describe("two-level consensus (replaces pool-weight majority trust)", () => {
   it("A/B: captured JUP has collectively dominant wrong weights without an individual cap trigger, but never validates them", () => {

@@ -172,6 +172,8 @@ export interface Distribution {
  */
 export interface MarketSnapshot {
   status: ValidationState;
+  confidence: MarketValidation["confidence"];
+  contextualQuote: { priceUsd: number; provider: string; fetchedAt: number } | null;
   reason: string;
   changeState: ValidationState;
   capState: ValidationState;

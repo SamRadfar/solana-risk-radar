@@ -34,6 +34,7 @@ export function normalizeGeckoPools(body: unknown, mint: string, fetchedAt: numb
       priceNative: positive(a.base_token_price_quote_token),
       requestedNativeRatio: side === "base" ? positive(a.base_token_price_quote_token) : side === "quote" ? positive(a.quote_token_price_base_token) : null,
       reportedPriceUsd: positive(a.base_token_price_usd),
+      reportedCounterPriceUsd: side === "base" ? positive(a.quote_token_price_usd) : side === "quote" ? positive(a.base_token_price_usd) : null,
       priceUsd: side === "base" ? positive(a.base_token_price_usd) : side === "quote" ? positive(a.quote_token_price_usd) : null,
       liquidityUsd: nonnegative(a.reserve_in_usd), volume24hUsd: nonnegative(object(a.volume_usd).h24),
       reportedChange24h: finite(object(a.price_change_percentage).h24),
@@ -53,7 +54,7 @@ export async function getGeckoSnapshot(mint: string): Promise<ProviderSnapshot> 
   const token = normalizeGeckoToken(object(tokenResult.body).data, tokenResult.fetchedAt, url);
   const observations = normalizeGeckoPools(poolsResult.body, mint, poolsResult.fetchedAt);
   const validToken = token?.mint === mint ? token : null;
-  const errors = [tokenResult.error, poolsResult.error].filter((x): x is string => x !== null);
+  const errors = [...tokenResult.events, ...poolsResult.events, tokenResult.error, poolsResult.error].filter((x): x is string => x !== null);
   if (!validToken && !Array.isArray(object(poolsResult.body).data)) errors.push("No identified token or pool response");
   return { provider: "geckoterminal", mint, fetchedAt: Math.max(tokenResult.fetchedAt, poolsResult.fetchedAt),
     available: validToken !== null || Array.isArray(object(poolsResult.body).data), token: validToken, observations, errors };
@@ -63,7 +64,7 @@ export async function getGeckoReferences(mints: string[]): Promise<{ references:
   if (!mints.length) return { references: [], error: null };
   const url = GECKO_ENDPOINT + "/tokens/multi/" + mints.map(encodeURIComponent).join(",");
   const result = await marketJson(url);
-  return { error: result.error ?? (!Array.isArray(object(result.body).data) ? "Malformed counter-reference response" : null),
+  return { error: result.error ?? (!Array.isArray(object(result.body).data) ? "Malformed counter-reference response" : result.events.join("; ") || null),
     references: list(object(result.body).data).map(raw => normalizeGeckoToken(raw, result.fetchedAt, url))
       .filter((r): r is TokenReference => r !== null && mints.includes(r.mint)) };
 }

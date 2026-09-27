@@ -78,8 +78,12 @@ export default function TokenPanel({ report }: { report: RiskReport }) {
         </div>
 
         <p role="status" className={styles.unavailable}>
-          {statusLabels[market.status]}{market.status !== "validated" ? " — " + market.reason : ""}
+          {statusLabels[market.status]}{market.status === "validated" ? " · " + market.confidence + " confidence" : ""}
         </p>
+        {market.contextualQuote && <p className={styles.unavailable} data-contextual-quote
+          title={`${market.contextualQuote.provider} · Fetched ${new Date(market.contextualQuote.fetchedAt).toISOString()} · Excluded from risk scoring`}>
+          Indicative quote {formatPrice(market.contextualQuote.priceUsd)} · Unverified
+        </p>}
         <dl className={styles.pairs}>
           <Cell label="Price" value={market.priceUsd !== null ? formatPrice(market.priceUsd) : null} />
           <Cell label="24h" reason={report.diagnostics.change24h.reason} value={formatChange(market.priceChange24hPercent) ?? market.changeState.replace("_", " ")} />
@@ -87,7 +91,7 @@ export default function TokenPanel({ report }: { report: RiskReport }) {
           <Cell
             label="Market cap"
             reason={report.diagnostics.marketCap.reason}
-            value={market.marketCapUsd !== null ? formatUsd(market.marketCapUsd) : market.capState.replace("_", " ")}
+            value={market.marketCapUsd !== null ? formatUsd(market.marketCapUsd) : market.capState === "unavailable" ? "Unavailable" : "Unverified"}
           />
           <Cell
             label="FDV"

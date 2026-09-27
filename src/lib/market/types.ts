@@ -38,6 +38,8 @@ export interface PoolObservation {
   /** Counter units per requested token, with orientation proven. */
   requestedNativeRatio: number | null;
   reportedPriceUsd: number | null;
+  /** Same-response counter USD, when supplied; consistency is not corroboration. */
+  reportedCounterPriceUsd?: number | null;
   priceUsd: number | null;
   liquidityUsd: number | null;
   volume24hUsd: number | null;
@@ -97,6 +99,7 @@ export interface ProviderOpinion {
   status: "usable" | "conflict" | "unavailable";
   priceUsd: number | null;
   candidatePrices: number[];
+  clusters: { min: number; max: number; dependencies: string[]; pools: string[] }[];
   token: TokenReference | null;
   priceChange24h: number | null;
   changeConflict: boolean;
@@ -128,6 +131,7 @@ export interface MarketPair {
 
 export interface PricePoint { t: number; p: number }
 export interface PriceHistory {
+  events?: string[];
   available: boolean;
   points: PricePoint[];
   pool: string | null;

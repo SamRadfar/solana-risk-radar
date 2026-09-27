@@ -35,5 +35,5 @@ export async function getPriceHistory(mint: string, pool: string, now?: number):
   const url = ENDPOINT + "/" + encodeURIComponent(pool) + "/ohlcv/minute?aggregate=5&limit=60&currency=usd&token=" + encodeURIComponent(mint);
   const result = await marketJson(url);
   const history = normalizeHistory(result.body, mint, pool, now ?? result.fetchedAt, url);
-  return result.error ? { ...history, error: result.error } : history;
+  return { ...history, events: result.events, ...(result.error ? { error: result.error } : {}) };
 }

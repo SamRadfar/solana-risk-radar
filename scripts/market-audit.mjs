@@ -16,9 +16,14 @@ const TOKENS = [
   ["BONK", "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"],
   ["WIF", "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"],
   ["PYUSD", "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo"],
+  ["RAY", "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R"],
+  ["JTO", "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL"],
+  ["PYTH", "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3"],
+  ["SAROS", "SarosY6Vscao718M4A778z4CGtvcwcGef5M9MEH1LGL"],
+  ["NEW", "DiLreFZuxDyzUsScrf2aszEEWcHRyvV8p2fXnS5Mpump"],
 ];
 const extra = process.argv.find(a => a.startsWith("--new-mint="))?.split("=")[1];
-if (extra) TOKENS.push(["NEW", extra]);
+if (extra) TOKENS.push(["EXTRA", extra]);
 const output = process.argv.find(a => a.startsWith("--output="))?.slice(9);
 let getMarketData, policy;
 if (providerOnly) {
@@ -58,7 +63,7 @@ for (const [name,mint] of TOKENS) {
       const report=await response.json(); d=report.diagnostics; market=report.market; signals=report.signals;
       check(report.overview.mint===mint,"requested mint identity");
     }
-    check(d.version==="market-integrity-v2.0","expected algorithm version");
+    check(d.version==="market-integrity-v2.5","expected algorithm version");
     if (!d.price || !Array.isArray(d.providers)) throw Error("Old/malformed validation diagnostics");
     console.log("\n"+name+" "+d.status+" price="+(market.priceUsd??"WITHHELD")+" confidence="+d.confidence);
     console.log("  cap="+d.marketCap.status+" fdv="+d.fdv.status+" 24h="+d.change24h.status+" disagreement="+d.price.disagreement);
@@ -97,13 +102,25 @@ for (const [name,mint] of TOKENS) {
     if(externalPrice===null){unavailable++; console.log("  External check UNAVAILABLE (HTTP "+refResponse.status+")");}
     else if(gap!==null){check(gap<=(policy?.PRICE_AGREEMENT_TOLERANCE??.05),"fresh external token price corroborates published price"); console.log("  external="+externalPrice+" gap="+gap);}
     else console.log("  external="+externalPrice+"; canonical withheld, no claim of accuracy");
-    results.push({name,mint,at:new Date().toISOString(),mode:providerOnly?"providers-only":"full-analysis",headers,external:{url:refUrl,status:refResponse.status,attempts:externalAttempts,price:externalPrice,gap},validation:d});
+    results.push({name,mint,at:new Date().toISOString(),mode:providerOnly?"providers-only":"full-analysis",headers,
+      contextualQuote:market.contextualQuote??null,
+      timing:{providerFetchDifferenceMs:Math.max(...d.providers.map(p=>p.fetchedAt))-Math.min(...d.providers.map(p=>p.fetchedAt)),
+        oldestObservationAgeMs:d.evaluatedAt-Math.min(...d.providers.flatMap(p=>p.observations.filter(o=>o.accepted).map(o=>o.fetchedAt)))},
+      riskUse:signals?signals.filter(s=>["Liquidity","Market Activity"].includes(s.category)).map(s=>({id:s.id,status:s.status,points:s.points})):null,
+      external:{url:refUrl,status:refResponse.status,attempts:externalAttempts,price:externalPrice,gap},validation:d});
   } catch(error) {
     failures++; results.push({name,mint,error:String(error)}); console.log("\n"+name+" ERROR "+String(error));
   }
   // Free-tier pacing: at most six GT calls per token, then forty-five seconds.
   if(name!==TOKENS.at(-1)[0]) await new Promise(resolve=>setTimeout(resolve,45000));
 }
-if(output) await writeFile(output,JSON.stringify({failures,externalUnavailable:unavailable,results},null,2)+"\n");
+const established=results.filter(r=>!['SAROS','NEW','EXTRA'].includes(r.name));
+const statuses=Object.fromEntries(['validated','single_source','conflict','unavailable'].map(status=>[status,established.filter(r=>r.validation?.status===status).length/established.length*100]));
+const gaps=established.filter(r=>r.validation?.status==='validated'&&r.validation.price.disagreement!==null).map(r=>r.validation.price.disagreement).sort((a,b)=>a-b);
+const calibration={establishedCount:established.length,statusPercent:statuses,validatedGapSampleSize:gaps.length,
+  medianGap:gaps.length?(gaps[Math.floor((gaps.length-1)/2)]+gaps[Math.floor(gaps.length/2)])/2:null,
+  p90Gap:gaps.length?gaps[Math.ceil(gaps.length*.9)-1]:null,maxGap:gaps.at(-1)??null};
+console.log('Calibration '+JSON.stringify(calibration));
+if(output) await writeFile(output,JSON.stringify({failures,externalUnavailable:unavailable,calibration,results},null,2)+"\n");
 console.log("\nAudit completed: "+failures+" failures; "+unavailable+" unavailable external checks. Withheld/conflict states are not accuracy confirmations.");
 process.exitCode=failures?1:unavailable?2:0;

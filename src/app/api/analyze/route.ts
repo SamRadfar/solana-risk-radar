@@ -16,6 +16,7 @@ import {
   pairsByLiquidity,
   spotPrice,
   totalLiquidity,
+  marketEvidenceFresh,
 } from "@/lib/market/access";
 import { getMarketData } from "@/lib/market/service";
 import { reportCacheKey, MARKET_ALGORITHM_VERSION } from "@/lib/market/policy";
@@ -52,7 +53,7 @@ export async function GET(request: NextRequest) {
   // slow on public RPC, so this makes re-inspecting a token feel instant and
   // avoids hammering a free endpoint.
   const cached = getCached<RiskReport>(reportCacheKey(mintAddress));
-  if (cached) {
+  if (cached && marketEvidenceFresh(cached.diagnostics, Date.now())) {
     return NextResponse.json(cached, {
       headers: { "Cache-Control": "private, no-store", "X-Cache": "hit", "X-Market-Version": MARKET_ALGORITHM_VERSION },
     });

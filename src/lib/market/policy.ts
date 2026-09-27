@@ -1,5 +1,5 @@
 /** Version both diagnostics and cache keys whenever interpretation changes. */
-export const MARKET_ALGORITHM_VERSION = "market-integrity-v2.0";
+export const MARKET_ALGORITHM_VERSION = "market-integrity-v2.5";
 
 /**
  * Symmetric max/min - 1 distances, not a token-specific dollar target.

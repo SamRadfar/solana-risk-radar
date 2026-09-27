@@ -45,5 +45,6 @@ export function normalizeDexScreener(body: unknown, mint: string, fetchedAt: num
 export async function getDexScreenerSnapshot(mint: string): Promise<ProviderSnapshot> {
   const result = await marketJson(DEXSCREENER_ENDPOINT + "/" + encodeURIComponent(mint));
   const snapshot = normalizeDexScreener(result.body, mint, result.fetchedAt);
-  return result.error ? { ...snapshot, available: false, errors: [result.error] } : snapshot;
+  return { ...snapshot, available: result.error ? false : snapshot.available,
+    errors: [...snapshot.errors, ...result.events, ...(result.error ? [result.error] : [])] };
 }

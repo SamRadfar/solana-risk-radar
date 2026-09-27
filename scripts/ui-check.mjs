@@ -278,6 +278,32 @@ for (const viewport of VIEWPORTS) {
     consoleErrors.slice(0, 3).join(" | "),
   );
 
+  // Deterministic presentation contracts, separately from the live flow above.
+  // Network interception is test-only; production still consumes server validation.
+  let fixture;
+  await page.route("**/api/analyze?*", route => route.fulfill({ json: fixture }));
+  for (const status of ["single_source", "conflict", "unavailable", "validated"]) {
+    fixture = structuredClone(apiReport);
+    const value = status === "validated" ? 1.23 : null;
+    Object.assign(fixture.overview, { priceUsd: value, marketCapUsd: null });
+    Object.assign(fixture.market, { status, confidence: status === "validated" ? "medium" : status === "single_source" ? "low" : "none",
+      priceUsd: value, marketCapUsd: null, fullyDilutedUsd: null, priceChange24hPercent: null,
+      capState: "conflict", fdvState: "unavailable", changeState: "unavailable", history: null, historyStatus: "unavailable",
+      contextualQuote: status === "single_source" ? { priceUsd: 1.23, provider: "fixture-provider", fetchedAt: Date.now() } : null });
+    fixture.diagnostics.status = status;
+    await page.reload({ waitUntil: "networkidle" });
+    await page.locator("#mint-address").fill(TOKEN);
+    await page.locator('form button[type="submit"]').click();
+    await page.locator("[data-market-status]").waitFor();
+    check(await page.locator("[data-market-status]").getAttribute("data-market-status") === status, `${status}: explicit state`);
+    const contextual = page.locator("[data-contextual-quote]");
+    check((await contextual.count() > 0) === (status === "single_source"), `${status}: contextual quote gating`);
+    check((await page.getByRole("region", { name: "Token to USD converter" }).count() > 0) === (status === "validated"), `${status}: converter uses only validated price`);
+    if (status === "single_source") check((await contextual.first().getAttribute("title")).includes("fixture-provider"), "contextual provider and timestamp attribution");
+    if (status === "validated") check((await page.locator("[data-market-status]").textContent()).includes("medium"), "cap/history missing evidence preserves validated medium confidence price");
+    check(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth) <= 1, `${status}: no horizontal overflow`);
+  }
+  check(pageErrors.length === 0 && consoleErrors.length === 0, "deterministic state UI has no runtime errors");
   await context.close();
 }
 

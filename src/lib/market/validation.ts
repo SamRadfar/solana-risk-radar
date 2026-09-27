@@ -1,4 +1,4 @@
-import type { MarketValidation, ProviderOpinion, ProviderSnapshot, TokenReference, ValidatedMetric, MetricEvidence, MarketPair, PriceHistory, ValidationState } from "./types";
+import type { MarketValidation, ProviderOpinion, ProviderSnapshot, TokenReference, ValidatedMetric, MetricEvidence, MarketPair, PriceHistory, ValidationState, ObservationDecision } from "./types";
 import { median, providerConsensus } from "./consensus";
 import { agrees, relativeDifference, MARKET_ALGORITHM_VERSION, PRICE_AGREEMENT_TOLERANCE, CIRCULATION_AGREEMENT_TOLERANCE, CHANGE_AGREEMENT_TOLERANCE, DEPTH_AGREEMENT_TOLERANCE, ACTIVITY_AGREEMENT_TOLERANCE, MAX_HISTORY_AGE_MS } from "./policy";
 
@@ -48,11 +48,16 @@ export function validateMarket(mint: string, snapshots: ProviderSnapshot[], refe
 
   // Match actual pool identities across providers; never add two providers'
   // reserve/volume totals. This is a corroborated indexed subset, not TVL.
-  const addresses = [...new Set(usable.flatMap(p => p.observations.filter(o => o.accepted).map(o => o.pairAddress!)))].sort();
+  // A zero-volume row cannot establish current spot, but measured zero activity
+  // remains usable when independent spot evidence confirms its valuation.
+  const metricEligible = (o: ObservationDecision) => o.accepted ||
+    (o.rejection === "Zero reported 24h volume; current traded price unproven" && price.value !== null &&
+      o.priceUsd !== null && agrees(o.priceUsd, price.value));
+  const addresses = [...new Set(usable.flatMap(p => p.observations.filter(metricEligible).map(o => o.pairAddress!)))].sort();
   const pairs: MarketPair[] = [], poolDecisions: MarketValidation["poolDecisions"] = [];
   const metricPools: { liquidity: number[]; volume: number[]; activity: number[] } = { liquidity: [], volume: [], activity: [] };
   for (const pairAddress of addresses) {
-    const rows = usable.flatMap(p => p.observations.filter(o => o.accepted && o.pairAddress === pairAddress));
+    const rows = usable.flatMap(p => p.observations.filter(o => metricEligible(o) && o.pairAddress === pairAddress));
     const poolsAgree = rows.length >= 2 && new Set(rows.map(o => o.provider)).size === rows.length &&
       new Set(rows.map(o => [o.baseAddress, o.quoteAddress].sort().join(":"))).size === 1;
     const metric = (read: (o: typeof rows[number]) => number | null, tolerance: number) =>

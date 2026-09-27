@@ -34,6 +34,10 @@ export function providerConsensus(snapshot: ProviderSnapshot, references: TokenR
     const expected = counter !== null && o.requestedNativeRatio !== null ? counter * o.requestedNativeRatio : null;
     const disagreement = expected !== null && o.priceUsd !== null ? relativeDifference(expected, o.priceUsd) : null;
     const nativeConflict = disagreement !== null && !agrees(expected!, o.priceUsd!, NATIVE_USD_TOLERANCE);
+    const internalExpected = o.reportedCounterPriceUsd && o.requestedNativeRatio
+      ? o.reportedCounterPriceUsd * o.requestedNativeRatio : null;
+    const internallyInconsistent = internalExpected !== null && o.priceUsd !== null &&
+      !agrees(internalExpected, o.priceUsd, NATIVE_USD_TOLERANCE);
     const rejection = !snapshot.available ? "Provider unavailable" :
       o.provider !== snapshot.provider || o.requestedMint !== snapshot.mint ? "Snapshot identity mismatch" :
       o.identityError ?? (!o.side || !o.counterMint || !o.pairAddress ? "Identity or orientation missing" :
@@ -41,12 +45,26 @@ export function providerConsensus(snapshot: ProviderSnapshot, references: TokenR
       o.priceUsd === null || !Number.isFinite(o.priceUsd) || o.priceUsd <= 0 ? "Unusable requested-token USD price" :
       o.liquidityUsd === null || !Number.isFinite(o.liquidityUsd) || o.liquidityUsd < MIN_OBSERVATION_LIQUIDITY_USD ? "Depth missing or below observation floor" :
       (counts.get(o.pairAddress) ?? 0) > 1 ? "Duplicate pool identity; all copies quarantined" :
-      nativeConflict ? "Native ratio contradicts independent counter-asset USD evidence" : null);
+      internallyInconsistent ? "Provider USD fields and native ratio are internally inconsistent" :
+      nativeConflict ? "Native ratio contradicts independent counter-asset USD evidence" :
+      o.volume24hUsd === 0 ? "Zero reported 24h volume; current traded price unproven" : null);
     return { ...o, accepted: rejection === null, rejection, weight: 0, correlationKey: snapshot.provider + ":" + (o.counterMint ?? "unknown"),
       nativeCheck: { status: disagreement === null ? "unavailable" : nativeConflict ? "conflict" : "consistent", referenceProvider: refs.map(r => r.provider).sort().join(",") || null, counterPriceUsd: counter, expectedPriceUsd: expected, disagreement } };
   }).sort((a, b) => (a.pairAddress ?? "").localeCompare(b.pairAddress ?? "") || JSON.stringify(a).localeCompare(JSON.stringify(b)));
 
   const accepted = observations.filter(o => o.accepted);
+  // Complete-range clusters expose competing ranges, never elect a row-count winner.
+  const clusters: ProviderOpinion["clusters"] = [];
+  for (const o of [...accepted].sort((a,b) => a.priceUsd! - b.priceUsd! || a.pairAddress!.localeCompare(b.pairAddress!))) {
+    let cluster = clusters.at(-1);
+    if (!cluster || !agrees(cluster.min, o.priceUsd!, POOL_CLUSTER_TOLERANCE)) {
+      cluster = { min: o.priceUsd!, max: o.priceUsd!, dependencies: [], pools: [] };
+      clusters.push(cluster);
+    }
+    cluster.max = o.priceUsd!;
+    if (!cluster.dependencies.includes(o.counterMint!)) cluster.dependencies.push(o.counterMint!);
+    cluster.pools.push(o.pairAddress!);
+  }
   const keys = [...new Set(accepted.map(o => o.counterMint!))].sort();
   const groups = keys.map(counterMint => {
     const rows = accepted.filter(o => o.counterMint === counterMint);
@@ -69,7 +87,7 @@ export function providerConsensus(snapshot: ProviderSnapshot, references: TokenR
   if (token?.marketCap) supplies.push(token.marketCap / token.priceUsd);
   const circulation = measurement(supplies, CIRCULATION_AGREEMENT_TOLERANCE);
   return { provider: snapshot.provider, mint: snapshot.mint, available: snapshot.available, fetchedAt: snapshot.fetchedAt,
-    status: !usable ? "unavailable" : conflict ? "conflict" : "usable", priceUsd, token, candidatePrices: [...candidates].sort((a,b) => a-b),
+    status: !usable ? "unavailable" : conflict ? "conflict" : "usable", priceUsd, token, candidatePrices: [...candidates].sort((a,b) => a-b), clusters,
     priceChange24h: priceUsd !== null && !changes.conflict && changes.value !== null ? (changes.value - 1) * 100 : null,
     changeConflict: changes.conflict, impliedCirculating: priceUsd !== null && !circulation.conflict ? circulation.value : null,
     circulationConflict: circulation.conflict, dispersion: spread(candidates), groups, observations, errors: [...snapshot.errors] };

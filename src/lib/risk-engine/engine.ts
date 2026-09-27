@@ -1,4 +1,4 @@
-import { validationOf, spotPrice, marketCap } from "../market/access";
+import { validationOf, spotPrice, marketCap, contextualQuote } from "../market/access";
 
 import {
   canonicalPair,
@@ -426,6 +426,8 @@ export function buildRiskReport(
      */
     market: {
       status: validationOf(input.marketData).status,
+      confidence: validationOf(input.marketData).confidence,
+      contextualQuote: contextualQuote(input.marketData),
       reason: validationOf(input.marketData).price.reason,
       changeState: validationOf(input.marketData).change24h.status,
       capState: validationOf(input.marketData).marketCap.status,

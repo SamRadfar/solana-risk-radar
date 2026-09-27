@@ -144,7 +144,12 @@ export function makeInput(overrides: Partial<AnalysisInput> = {}): AnalysisInput
   };
   const now = Date.now();
   const snapshots: ProviderSnapshot[] = ["fixture-a", "fixture-b"].map(provider => ({
-    provider, mint: input.mint, available: input.marketData.available, fetchedAt: now, token: null, errors: [],
+    provider, mint: input.mint, available: input.marketData.available, fetchedAt: now,
+    // A dead-volume scoring fixture still assumes an independently quoted spot.
+    // Zero-volume pools alone can no longer establish that assumption.
+    token: input.marketData.pairs.length > 0 && input.marketData.pairs.every(p => p.volume24hUsd === 0) && input.marketData.pairs[0].priceUsd !== null
+      ? { provider, mint: input.mint, priceUsd: input.marketData.pairs[0].priceUsd!, marketCap: null, fetchedAt: now, sourceUrl: "https://fixture.invalid/spot" } : null,
+    errors: [],
     observations: input.marketData.pairs.map(p => ({
       ...p, provider, requestedMint: input.mint, chain: "solana",
       baseAddress: input.mint, baseSymbol: "TEST", quoteAddress: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
