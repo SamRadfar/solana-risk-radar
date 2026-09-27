@@ -2,25 +2,13 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { validateMintAddress } from "@/lib/solana/address";
 import { getPriceHistory } from "@/lib/providers/geckoterminal";
+import { historyCacheKey } from "@/lib/market/policy";
 import { getCached, setCached } from "@/lib/cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * Short-range price history for the market-context chart.
- *
- * Separate from the analysis endpoint on purpose. The verdict must not wait on
- * a chart, and a chart that cannot be drawn must not degrade the verdict — so
- * the report renders first and this is fetched beside it.
- *
- * Both parameters are untrusted. The mint goes through the same validator the
- * analysis endpoint uses, the pool is checked to be a well-formed address
- * before it is ever put in a URL, and the provider then requires the pool to
- * name this mint as its base token before returning anything.
- *
- * Nothing here reaches the risk engine. This endpoint is context only.
- */
+/** Optional history endpoint; analysis performs its own integrity check before scoring. */
 export async function GET(request: NextRequest) {
   const mintRaw = request.nextUrl.searchParams.get("mint") ?? "";
   const poolRaw = request.nextUrl.searchParams.get("pool") ?? "";
@@ -37,11 +25,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid pool address." }, { status: 400 });
   }
 
-  const key = `history:${mint.address}:${pool.address}`;
+  const key = historyCacheKey(mint.address, pool.address);
   const cached = getCached<unknown>(key);
   if (cached) {
     return NextResponse.json(cached, {
-      headers: { "Cache-Control": "private, max-age=60", "X-Cache": "hit" },
+      headers: { "Cache-Control": "private, no-store", "X-Cache": "hit" },
     });
   }
 
@@ -52,6 +40,6 @@ export async function GET(request: NextRequest) {
   setCached(key, history, 60_000);
 
   return NextResponse.json(history, {
-    headers: { "Cache-Control": "private, max-age=60", "X-Cache": "miss" },
+    headers: { "Cache-Control": "private, no-store", "X-Cache": "miss" },
   });
 }

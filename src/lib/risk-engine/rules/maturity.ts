@@ -1,3 +1,4 @@
+import { pairsByLiquidity } from "../../market/access";
 import type { AnalysisInput } from "../input";
 import type { RiskSignal } from "../types";
 import {
@@ -38,7 +39,7 @@ export function poolMaturityRule({ marketData }: AnalysisInput): RiskSignal {
   const METRIC = "Age of the oldest liquidity pool";
   const MAX_POINTS = 12;
 
-  const timestamps = marketData.pairs
+  const timestamps = pairsByLiquidity(marketData)
     .map((pair) => pair.pairCreatedAt)
     .filter((value): value is number => typeof value === "number" && value > 0);
 
@@ -50,13 +51,13 @@ export function poolMaturityRule({ marketData }: AnalysisInput): RiskSignal {
       metric: METRIC,
       maxPoints: MAX_POINTS,
       reason: marketData.available
-        ? "No pool creation timestamp is available, because no liquidity pool was found for this token."
-        : `Market data could not be retrieved from DexScreener. ${marketData.error ?? ""}`.trim(),
+        ? "No independently corroborated pool creation timestamp is available."
+        : `Independent market measurement is unavailable. ${marketData.error ?? ""}`.trim(),
     });
   }
 
   const oldest = Math.min(...timestamps);
-  const ageDays = (Date.now() - oldest) / (1000 * 60 * 60 * 24);
+  const ageDays = ((marketData.validation?.evaluatedAt ?? oldest) - oldest) / (1000 * 60 * 60 * 24);
   const severity = classifyDescending(ageDays, POOL_AGE_BANDS);
 
   return signal({

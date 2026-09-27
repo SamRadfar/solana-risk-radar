@@ -1,343 +1,226 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+vi.mock("server-only", () => ({}));
+import captured from "./fixtures/jup-2026-09-27.json";
+import { normalizeDexScreener } from "../providers/dexscreener";
+import { normalizeGeckoPools, normalizeGeckoToken } from "../providers/gecko-market";
+import { providerConsensus } from "./consensus";
+import { validateMarket, withHistory, compareMetric } from "./validation";
+import { normalizeHistory } from "../providers/geckoterminal";
+import { spotPrice, marketCap, fullyDilutedValuation, priceChange24h } from "./access";
+import { reportCacheKey, historyCacheKey, MARKET_ALGORITHM_VERSION, agrees, PRICE_AGREEMENT_TOLERANCE } from "./policy";
+import { priceVolatilityRule } from "../risk-engine/rules/market";
+import { makeInput } from "../risk-engine/test-fixtures";
+import { buildRiskReport } from "../risk-engine/engine";
+import { getCached, setCached } from "../cache";
+import type { PoolObservation, ProviderSnapshot, MarketData } from "./types";
 
-import type { MarketData, MarketPair } from "../providers/dexscreener";
-import {
-  fullyDilutedValuation,
-  marketCap,
-  marketConsensus,
-  priceChange24h,
-  spotPrice,
-  totalLiquidity,
-  totalVolume24h,
-} from "../providers/dexscreener";
-import { buildConsensus } from "./consensus";
-
-/**
- * Market-data regression suite.
- *
- * These tests exist because the product once shipped a price that was wrong by
- * three orders of magnitude, and nothing caught it. They assert *behaviour* —
- * that a crowd of agreeing markets outranks one loud one — never a particular
- * dollar figure, so they keep working as real prices move.
- */
-
-let sequence = 0;
-
-function pool(overrides: Partial<MarketPair> = {}): MarketPair {
-  sequence += 1;
-  return {
-    dexId: "raydium",
-    pairAddress: `pool-${sequence}`,
-    quoteSymbol: "SOL",
-    liquidityUsd: 500_000,
-    volume24hUsd: 250_000,
-    priceUsd: 1,
-    pairCreatedAt: Date.now() - 400 * 24 * 60 * 60 * 1000,
-    fdv: null,
-    marketCap: null,
-    priceChange24h: 1,
-    buys24h: 400,
-    sells24h: 380,
-    url: null,
-    info: { imageUrl: null, websites: [], socials: [] },
-    ...overrides,
-  };
+const NOW = Date.parse(captured.capturedAt);
+const MINT = "So11111111111111111111111111111111111111112";
+const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const OTHER = captured.mint;
+const POOL = captured.dex.pairs[0].pairAddress;
+function row(overrides: Partial<PoolObservation> = {}): PoolObservation {
+  return { provider: "a", chain: "solana", dexId: "dex", pairAddress: POOL, requestedMint: MINT,
+    baseAddress: MINT, baseSymbol: "SOL", quoteAddress: USDC, quoteSymbol: "USDC", side: "base", counterMint: USDC,
+    trustedCounterMint: true, priceNative: 1, requestedNativeRatio: 1, reportedPriceUsd: 1, priceUsd: 1,
+    liquidityUsd: 100000, volume24hUsd: 10000, reportedChange24h: 2, priceChange24h: 2, buys24h: 100, sells24h: 100,
+    pairCreatedAt: NOW-86400000, marketCap: 1000000, fdv: 2000000, fetchedAt: NOW, providerUpdatedAt: null,
+    sourceUrl: "https://fixture.invalid", identityError: null, info: { imageUrl: null, websites: [], socials: [] }, ...overrides };
 }
-
-function market(pairs: MarketPair[]): MarketData {
-  return {
-    available: true,
-    pairs,
-    name: "Test",
-    symbol: "TEST",
-    imageUrl: null,
-    websites: [],
-    socials: [],
-  };
+function snap(provider = "a", observations = [row()], overrides: Partial<ProviderSnapshot> = {}): ProviderSnapshot {
+  return { provider, mint: MINT, available: true, fetchedAt: NOW, observations: observations.map(o => ({ ...o, provider })), token: null, errors: [], ...overrides };
 }
+const run = (a = snap(), b = snap("b")) => validateMarket(MINT, [a,b], [], NOW, 2000000);
+const market = (v = run()): MarketData => ({ available: true, pairs: v.pairs, validation: v, name: null, symbol: null, imageUrl: null, websites: [], socials: [] });
 
-/** A believable spread of honest markets around one price. */
-function cluster(price: number, count: number, liquidity = 400_000): MarketPair[] {
-  return Array.from({ length: count }, (_, i) =>
-    pool({
-      // A few tenths of a percent apart, as real venues are.
-      priceUsd: price * (1 + (i - count / 2) * 0.001),
-      liquidityUsd: liquidity,
-      dexId: ["raydium", "orca", "meteora", "lifinity", "phoenix"][i % 5],
-    }),
-  );
-}
-
-describe("canonical price consensus", () => {
-  it("takes the cluster the market agrees on", () => {
-    const consensus = buildConsensus(market(cluster(0.3, 9)));
-
-    expect(consensus.available).toBe(true);
-    expect(consensus.acceptedCount).toBe(9);
-    expect(consensus.priceUsd).toBeGreaterThan(0.29);
-    expect(consensus.priceUsd).toBeLessThan(0.31);
+describe("two-level consensus (replaces pool-weight majority trust)", () => {
+  it("A/B: captured JUP has collectively dominant wrong weights without an individual cap trigger, but never validates them", () => {
+    const pairs = captured.dex.pairs;
+    const oldWeights = pairs.map(p => Math.sqrt(p.liquidity.usd) * (1+Math.log10(1+p.volume.h24)/12) *
+      (["USDC","USDT","SOL","WSOL","USDE","PYUSD"].includes(p.quoteToken.symbol) ? 1 : .75) * (p.txns.h24.buys+p.txns.h24.sells>0 ? 1 : .4));
+    const total = oldWeights.reduce((a,b)=>a+b,0);
+    expect(pairs.filter(p=>Number(p.priceUsd)>1000)).toHaveLength(4);
+    expect(pairs.filter(p=>Number(p.priceUsd)<1)).toHaveLength(26);
+    expect(oldWeights.filter((_,i)=>Number(pairs[i].priceUsd)>1000).reduce((a,b)=>a+b,0)/total).toBeCloseTo(.632863,5);
+    expect(oldWeights.every(w=>w<.9*(total-w))).toBe(true);
+    const dex = normalizeDexScreener(captured.dex, captured.mint, NOW);
+    const gt: ProviderSnapshot = { provider:"geckoterminal", mint:captured.mint, available:true, fetchedAt:NOW, observations:[],
+      token:normalizeGeckoToken(captured.gecko.data,NOW,"https://fixture.invalid"), errors:[] };
+    const unresolved = validateMarket(captured.mint,[dex,gt],[],NOW,6861486518.571356);
+    expect(unresolved.status).toBe("conflict");
+    expect(unresolved.price.value).toBeNull();
+    const refs = [captured.gecko_met.data,captured.gecko_jto.data].map(t=>normalizeGeckoToken(t,NOW,"https://fixture.invalid")!);
+    const checked = validateMarket(captured.mint,[dex,gt],refs,NOW,6861486518.571356);
+    expect(checked.price.value === null || checked.price.value < 1).toBe(true);
+    expect(checked.providers.find(p=>p.provider==="dexscreener")!.observations.filter(o=>o.nativeCheck.status==="conflict")).toHaveLength(4);
+    expect(checked.change24h.value).toBeNull();
   });
-
-  /**
-   * The BONK regression, stated as behaviour.
-   *
-   * A Meteora pool quoted BONK thousands of times above the market while
-   * reporting the deepest liquidity of any pool. Under "deepest pool wins" it
-   * became the canonical price and took market cap and 24h change with it.
-   * The scenario is reconstructed here with a synthetic price, so the test
-   * asserts that consensus survives the attack rather than pinning a number
-   * that will be stale tomorrow.
-   */
-  it("does not let one anomalous deep pool override a broad market", () => {
-    const real = 0.0000234;
-    const pools = [
-      ...cluster(real, 9, 300_000),
-      pool({
-        dexId: "meteora",
-        priceUsd: real * 5000,
-        // Deeper than every honest pool put together.
-        liquidityUsd: 36_500_000,
-        volume24hUsd: 5_000_000,
-        priceChange24h: 495_616,
-        marketCap: 1_320_000_000_000,
-      }),
-    ];
-
-    const consensus = buildConsensus(market(pools));
-    const anomaly = consensus.observations.find((o) => o.priceUsd === real * 5000);
-
-    // The canonical price stays inside the honest cluster.
-    expect(consensus.priceUsd).toBeGreaterThan(real * 0.95);
-    expect(consensus.priceUsd).toBeLessThan(real * 1.05);
-
-    // The anomaly is rejected, and the reason is recorded.
-    expect(anomaly?.accepted).toBe(false);
-    expect(anomaly?.rejection).toMatch(/consensus/i);
-
-    // Its liquidity and volume are excluded from the totals it would inflate.
-    expect(consensus.liquidityUsd).toBeLessThan(36_500_000);
-    expect(consensus.acceptedCount).toBe(9);
-    expect(consensus.rejectedCount).toBe(1);
-
-    // And it cannot drag the 24h change with it.
-    expect(consensus.priceChange24hPercent).toBeLessThan(100);
+  it("C/Q: ten pools sharing a quote remain one group and one independent provider", () => {
+    const a=snap("a",Array.from({length:10},(_,i)=>row({pairAddress:"pool-"+i})));
+    const opinion=providerConsensus(a,[],NOW);
+    expect(opinion.groups).toHaveLength(1);
+    expect(opinion.observations.reduce((n,o)=>n+o.weight,0)).toBeCloseTo(1);
+    const v=validateMarket(MINT,[a],[],NOW,2000000);
+    expect(v.status).toBe("single_source"); expect(v.confidence).toBe("low"); expect(v.price.value).toBeNull();
+    expect(run(a,snap("b",[row({priceUsd:5000})])).status).toBe("conflict");
   });
-
-  it("rejects an outlier priced far below the market as well as far above", () => {
-    const pools = [...cluster(2, 6), pool({ priceUsd: 0.002, liquidityUsd: 9_000_000 })];
-    const consensus = buildConsensus(market(pools));
-
-    expect(consensus.priceUsd).toBeGreaterThan(1.9);
-    expect(consensus.observations.find((o) => o.priceUsd === 0.002)?.rejection).toMatch(
-      /below the market consensus/i,
-    );
+  it.each([.0001,5000])("minority incompatible cluster at %s cannot be discarded by votes or depth", priceUsd => {
+    const a=snap("a",[row(),row({pairAddress:"bad",priceUsd,liquidityUsd:1e15})]);
+    expect(run(a).status).toBe("conflict");
   });
-
-  it("holds the line even when outliers outnumber the honest cluster in count", () => {
-    // Four thin manipulated pools against three deep honest ones: weight, not
-    // headcount, decides.
-    const pools = [
-      ...cluster(1, 3, 2_000_000),
-      pool({ priceUsd: 50, liquidityUsd: 3_000, volume24hUsd: 100 }),
-      pool({ priceUsd: 51, liquidityUsd: 3_000, volume24hUsd: 100 }),
-      pool({ priceUsd: 52, liquidityUsd: 3_000, volume24hUsd: 100 }),
-      pool({ priceUsd: 53, liquidityUsd: 3_000, volume24hUsd: 100 }),
-    ];
-    const consensus = buildConsensus(market(pools));
-
-    expect(consensus.priceUsd).toBeGreaterThan(0.9);
-    expect(consensus.priceUsd).toBeLessThan(1.1);
+  it("D: coherently inflating price, cap and liquidity does not self-validate",()=>{
+    const a=snap("a",[row({priceUsd:5000,marketCap:5e9,liquidityUsd:5e8})]);
+    const v=run(a); expect(v.status).toBe("conflict"); expect(v.marketCap.value).toBeNull(); expect(v.fdv.value).toBeNull();
   });
-
-  it("never lets a mean-style estimator be dragged by one extreme value", () => {
-    const withOutlier = buildConsensus(
-      market([...cluster(1, 5), pool({ priceUsd: 1_000_000, liquidityUsd: 800_000 })]),
-    );
-    const withoutOutlier = buildConsensus(market(cluster(1, 5)));
-
-    expect(withOutlier.priceUsd).toBeCloseTo(withoutOutlier.priceUsd as number, 6);
+  it("E: native USD contradiction rejects the row with its provenance",()=>{
+    const p=providerConsensus(snap("a",[row({priceUsd:5000})]),[{provider:"b",mint:USDC,priceUsd:1,marketCap:null,fetchedAt:NOW,sourceUrl:"https://fixture.invalid"}],NOW);
+    expect(p.observations[0].accepted).toBe(false); expect(p.observations[0].nativeCheck.expectedPriceUsd).toBe(1);
+    expect(p.observations[0].rejection).toContain("Native ratio");
   });
-});
-
-describe("pool validation", () => {
-  it("ignores pairs where the analysed mint is not the base token", () => {
-    const consensus = buildConsensus(
-      market([...cluster(1, 3), pool({ priceUsd: null, liquidityUsd: 5_000_000 })]),
-    );
-
-    expect(consensus.acceptedCount).toBe(3);
-    expect(
-      consensus.observations.find((o) => o.rejection?.includes("not the base token")),
-    ).toBeDefined();
+  it("conflicting counter-price references cannot manufacture native consistency",()=>{
+    const refs=[{provider:"b",mint:USDC,priceUsd:.1,marketCap:null,fetchedAt:NOW,sourceUrl:"https://fixture.invalid"},
+      {provider:"c",mint:USDC,priceUsd:1.9,marketCap:null,fetchedAt:NOW,sourceUrl:"https://fixture.invalid"}];
+    const p=providerConsensus(snap(),refs,NOW);
+    expect(p.observations[0].nativeCheck.status).toBe("unavailable");
+    expect(p.observations[0].nativeCheck.expectedPriceUsd).toBeNull();
   });
-
-  it("counts a duplicated pool once", () => {
-    const shared = pool({ liquidityUsd: 400_000 });
-    const consensus = buildConsensus(market([shared, { ...shared }, ...cluster(1, 2)]));
-
-    expect(consensus.acceptedCount).toBe(3);
-    expect(
-      consensus.observations.find((o) => o.rejection === "Duplicate of a pool already counted"),
-    ).toBeDefined();
-    expect(consensus.liquidityUsd).toBe(400_000 + 400_000 + 400_000);
+  it("G: independent agreement establishes price and corroborated metrics",()=>{
+    const v=run(snap(),snap("b",[row({priceUsd:1.01,marketCap:1010000})]));
+    expect(v.status).toBe("validated"); expect(v.price.value).toBeCloseTo(1.005);
+    expect(v.liquidity.value).toBe(100000); expect(v.volume24h.value).toBe(10000);
+    expect(v.pairs).toHaveLength(1);
   });
-
-  it("discards dust pools, whose quoted price is not a market", () => {
-    const consensus = buildConsensus(
-      market([...cluster(1, 3), pool({ priceUsd: 99, liquidityUsd: 12 })]),
-    );
-
-    expect(consensus.acceptedCount).toBe(3);
-    expect(
-      consensus.observations.find((o) => o.rejection?.includes("Negligible liquidity")),
-    ).toBeDefined();
+  it("H: massive provider conflict has no winner",()=>{
+    const v=run(snap(),snap("b",[row({priceUsd:5000,liquidityUsd:1e20})]));
+    expect(v.status).toBe("conflict"); expect(v.price.value).toBeNull(); expect(v.confidence).toBe("none");
+    expect(v.price.sources.map(s=>s.value)).toEqual([1,5000]);
   });
-
-  it("discards prices and liquidity that are not usable numbers", () => {
-    const consensus = buildConsensus(
-      market([
-        ...cluster(1, 3),
-        pool({ priceUsd: 0 }),
-        pool({ priceUsd: Number.NaN }),
-        pool({ liquidityUsd: Number.NaN }),
-      ]),
-    );
-
-    expect(consensus.acceptedCount).toBe(3);
-    expect(consensus.rejectedCount).toBe(3);
+  it("I: outage is single-source, never validation or a spurious conflict",()=>{
+    const v=run(snap(),snap("b",[],{available:false,errors:["timeout"]}));
+    expect(v.status).toBe("single_source"); expect(v.price.sources[0].value).toBe(1); expect(v.price.value).toBeNull();
   });
-
-  it("records a reason for every rejection", () => {
-    const consensus = buildConsensus(
-      market([...cluster(1, 4), pool({ priceUsd: 500, liquidityUsd: 900_000 })]),
-    );
-
-    for (const observation of consensus.observations) {
-      if (!observation.accepted) expect(observation.rejection).toBeTruthy();
-    }
+  it.each(["marketCap","fdv","change24h","liquidity","volume24h"] as const)("J/K: %s withheld when price is unresolved", key=>{
+    const v=run(snap(),snap("b",[row({priceUsd:5000})])); expect(v[key].value).toBeNull();
+  });
+  it("cap and FDV have distinct supply provenance",()=>{
+    const m=market(); expect(marketCap(m)).toBe(1000000); expect(fullyDilutedValuation(m,2000000)).toBe(2000000);
+    expect(m.validation!.marketCap.sources).toHaveLength(2);
+    const v=run(snap("a",[row({marketCap:null})]),snap("b",[row({marketCap:null})]));
+    expect(v.marketCap.value).toBeNull(); expect(v.fdv.value).toBe(2000000);
+  });
+  it("one cap provider and impossible circulating supply are withheld",()=>{
+    expect(run(snap(),snap("b",[row({marketCap:null})])).marketCap.status).toBe("single_source");
+    expect(run(snap("a",[row({marketCap:3e6})]),snap("b",[row({marketCap:3e6})])).marketCap.status).toBe("conflict");
+  });
+  it("L: display and risk signal consume exactly the same validated extreme return",()=>{
+    const v=run(snap("a",[row({priceChange24h:10000})]),snap("b",[row({priceChange24h:10000})]));
+    const input=makeInput(); input.marketData=market(v);
+    const change=priceChange24h(input.marketData)!;
+    expect(change).toBe(10000);
+    const signal=priceVolatilityRule(input);
+    expect(signal.observedValue).toBe("+"+change.toFixed(2)+"% in 24h"); expect(signal.severity).toBe("critical");
+  });
+  it("spot agreement cannot validate contradictory 24h returns",()=>{
+    const v=run(snap(),snap("b",[row({priceChange24h:400000})]));
+    expect(v.price.status).toBe("validated"); expect(v.change24h.status).toBe("conflict");
+    const input=makeInput(); input.marketData=market(v); expect(priceVolatilityRule(input).status).toBe("unavailable");
+  });
+  it("N: fresh contradictory history flows upward and invalidates all derived metrics",()=>{
+    const v=run(snap(),snap("geckoterminal"));
+    const h={available:true,points:[{t:NOW,p:5000}],mint:MINT,pool:POOL,side:"quote" as const,fetchedAt:NOW,sourceUrl:"https://fixture.invalid"};
+    const checked=withHistory(v,h,NOW);
+    expect(checked.status).toBe("conflict"); expect(checked.history?.points).toHaveLength(1);
+    expect(checked.price.value).toBeNull(); expect(checked.fdv.value).toBeNull(); expect(checked.historyCheck.status).toBe("conflict");
+    expect(withHistory(v,{...h,points:[{t:NOW-3600000,p:5000}]},NOW).status).toBe("validated");
+  });
+  it("P: pool/provider permutations are stable and duplicates cannot add confidence",()=>{
+    const rows=[row(),row({pairAddress:"pool-2"})], a=snap("a",rows), b=snap("b",rows);
+    expect(run(a,b)).toEqual(run(snap("a",[...rows].reverse()),snap("b",[...rows].reverse())));
+    expect(validateMarket(MINT,[a,b],[],NOW,2e6)).toEqual(validateMarket(MINT,[b,a],[],NOW,2e6));
+    const p=providerConsensus(snap("a",[row(),row()]),[],NOW);
+    expect(p.observations.every(o=>!o.accepted && o.rejection?.includes("Duplicate"))).toBe(true);
+    expect(validateMarket(MINT,[a,a],[],NOW,2e6).status).toBe("conflict");
+  });
+  it("R: stale observations and old schema cannot provide a publishable price",()=>{
+    expect(run(snap("a",[row({fetchedAt:NOW-100000})])).status).toBe("single_source");
+    const m=market(); m.validation!.version="old"; expect(spotPrice(m)).toBeNull();
+    expect(run().version).toBe(MARKET_ALGORITHM_VERSION);
+    setCached(MINT,{old:true}); expect(getCached(reportCacheKey(MINT))).toBeNull();
+    expect(reportCacheKey(MINT)).toContain(MARKET_ALGORITHM_VERSION); expect(historyCacheKey(MINT,POOL)).toContain(MARKET_ALGORITHM_VERSION);
+  });
+  it("agreement boundary is symmetric and does not round away a conflict",()=>{
+    expect(agrees(1,1+PRICE_AGREEMENT_TOLERANCE)).toBe(true);
+    expect(agrees(1+PRICE_AGREEMENT_TOLERANCE,1)).toBe(true);
+    expect(agrees(1,1+PRICE_AGREEMENT_TOLERANCE+1e-6)).toBe(false);
+  });
+  it.each([null,0,-1,Infinity,NaN])("unusable price %s rejected with reasons", priceUsd=>{
+    const p=providerConsensus(snap("a",[row({priceUsd})]),[],NOW); expect(p.status).toBe("unavailable"); expect(p.observations[0].rejection).toBeTruthy();
+  });
+  it("dust does not establish an incompatible cluster",()=>{
+    const v=run(snap("a",[row(),row({pairAddress:"dust",liquidityUsd:1,priceUsd:5000})]));
+    expect(v.status).toBe("validated"); expect(v.providers[0].observations.find(o=>o.pairAddress==="dust")!.accepted).toBe(false);
+  });
+  it("depth inflation cannot leak through otherwise validated spot",()=>{
+    const v=run(snap("a",[row({liquidityUsd:1e10})]),snap("b"));
+    expect(v.price.status).toBe("validated"); expect(v.liquidity.value).toBeNull();
+  });
+  it("missing pool activity stays null and cannot be counted as zero",()=>{
+    const v=run(snap("a",[row({volume24hUsd:null,buys24h:null})]),snap("b"));
+    expect(v.price.status).toBe("validated");
+    expect(v.pairs[0].volume24hUsd).toBeNull(); expect(v.pairs[0].buys24h).toBeNull();
+    expect(v.volume24h.status).toBe("unavailable"); expect(v.activity.value).toBeNull();
+  });
+  it("unavailable data is never a measured zero",()=>{
+    const v=validateMarket(MINT,[],[],NOW,null);
+    expect(v.status).toBe("unavailable"); expect(v.price.value).toBeNull(); expect(v.liquidity.value).toBeNull();
+    expect(compareMetric([{provider:"a",value:null,fetchedAt:NOW}]).status).toBe("unavailable");
+  });
+  it("conflict removes market rules from scoring denominator without altering other signals",()=>{
+    const input=makeInput(); input.marketData=market(run(snap(),snap("b",[row({priceUsd:5000})])));
+    const overview={mint:MINT,name:null,symbol:null,decimals:9,supply:"1",supplyUi:2e6,supplyIsMeaningful:true,priceUsd:5000,marketCapUsd:5e9,imageUrl:null,tokenProgram:"spl-token",metadataSource:"none",websites:[],socials:[]};
+    const r=buildRiskReport(input,{overview,sources:[],elapsedMs:0});
+    expect(r.overview.priceUsd).toBeNull(); expect(r.market.priceUsd).toBeNull();
+    const unmeasured=r.signals.filter(s=>["Liquidity","Market Activity"].includes(s.category));
+    expect(unmeasured.every(s=>s.status==="unavailable" && s.points===0)).toBe(true);
+    expect(r.availableWeight).toBe(r.signals.filter(s=>s.status==="ok").reduce((n,s)=>n+s.maxPoints,0));
+    expect(r.signals.find(s=>s.id==="mint-authority")!.status).toBe("ok");
   });
 });
 
-describe("confidence", () => {
-  it("is high when several strong markets agree closely", () => {
-    const consensus = buildConsensus(
-      market(cluster(1, 6).map((p) => ({ ...p, quoteSymbol: "USDC" }))),
-    );
-    expect(consensus.confidence).toBe("high");
+describe("provider identity and orientation",()=>{
+  const raw=(overrides:Record<string,unknown>={})=>({chainId:"solana",dexId:"test",pairAddress:POOL,
+    baseToken:{address:MINT,symbol:"SOL"},quoteToken:{address:USDC,symbol:"USDC"},priceUsd:"100",priceNative:"100",
+    liquidity:{usd:10000},volume:{h24:1000},priceChange:{h24:10},txns:{h24:{buys:5,sells:10}},marketCap:1e9,...overrides});
+  it("DS quote side derives USD from a proven ratio, never inherits base cap/change",()=>{
+    const o=normalizeDexScreener({pairs:[raw()]},USDC,NOW).observations[0];
+    expect(o.side).toBe("quote");expect(o.priceUsd).toBe(1);expect(o.requestedNativeRatio).toBe(.01);
+    expect(o.priceChange24h).toBeNull();expect(o.marketCap).toBeNull();expect(o.buys24h).toBe(10);
   });
-
-  it("is low when a single market is all the evidence there is", () => {
-    const consensus = buildConsensus(market([pool({ quoteSymbol: "WIF" })]));
-    expect(consensus.confidence).toBe("low");
-    // Still produces a defensible estimate rather than refusing outright.
-    expect(consensus.priceUsd).toBe(1);
+  it("F: opposite DS/GT orientations normalize the requested JUP mint",()=>{
+    const gt=normalizeGeckoPools({data:[captured.gecko_bad_pool.data]},captured.mint,NOW)[0];
+    expect(gt.side).toBe("quote"); expect(gt.priceUsd).toBeGreaterThan(0); expect(gt.priceUsd).toBeLessThan(1);
+    const base=normalizeDexScreener({pairs:[raw({baseToken:{address:captured.mint},quoteToken:{address:gt.baseAddress},priceUsd:String(gt.priceUsd),priceNative:String(gt.requestedNativeRatio)})]},captured.mint,NOW).observations[0];
+    expect(base.side).toBe("base");expect(base.priceUsd).toBeCloseTo(gt.priceUsd!);
+    expect(gt.priceChange24h).toBeNull();
   });
-
-  it("is none, with no price, when nothing survives validation", () => {
-    const consensus = buildConsensus(market([pool({ liquidityUsd: 5 })]));
-    expect(consensus.confidence).toBe("none");
-    expect(consensus.priceUsd).toBeNull();
-    expect(consensus.available).toBe(false);
+  it("O: ticker spoofing cannot confer trusted-quote identity",()=>{
+    const o=normalizeDexScreener({pairs:[raw({quoteToken:{address:OTHER,symbol:"USDC"}})]},MINT,NOW).observations[0];
+    expect(o.trustedCounterMint).toBe(false);
   });
-
-  it("degrades when accepted markets disagree widely", () => {
-    const spread = [
-      pool({ priceUsd: 1.0 }),
-      pool({ priceUsd: 1.2 }),
-      pool({ priceUsd: 1.25 }),
-    ];
-    expect(buildConsensus(market(spread)).confidence).not.toBe("high");
+  it.each([{chainId:"ethereum"},{baseToken:{address:OTHER},quoteToken:{address:USDC}},{pairAddress:"not-address"}])("wrong chain/mint/pool is rejected: %j",override=>{
+    const ds=normalizeDexScreener({pairs:[raw(override)]},MINT,NOW);
+    expect(providerConsensus(ds,[],NOW).observations[0].accepted).toBe(false);
   });
-});
-
-describe("aggregates follow the consensus", () => {
-  const withOutlier = market([
-    ...cluster(1, 4, 250_000),
-    pool({ priceUsd: 900, liquidityUsd: 10_000_000, volume24hUsd: 9_000_000 }),
-  ]);
-
-  it("counts only validated liquidity and volume", () => {
-    expect(totalLiquidity(withOutlier)).toBe(1_000_000);
-    expect(totalVolume24h(withOutlier)).toBe(1_000_000);
+  it("malformed payload and absent quote ratio cannot manufacture price",()=>{
+    expect(normalizeDexScreener({},MINT,NOW).available).toBe(false);
+    expect(normalizeDexScreener({pairs:[raw({priceNative:null})]},USDC,NOW).observations[0].priceUsd).toBeNull();
   });
-
-  it("prices from the consensus, not the deepest pool", () => {
-    expect(spotPrice(withOutlier)).toBeLessThan(2);
-  });
-
-  it("takes 24h change from the consensus too", () => {
-    const skewed = market([
-      ...cluster(1, 4),
-      pool({ priceUsd: 900, liquidityUsd: 10_000_000, priceChange24h: 400_000 }),
-    ]);
-    expect(priceChange24h(skewed)).toBeLessThan(100);
-  });
-
-  it("reads history from a pool inside the accepted cluster", () => {
-    const consensus = marketConsensus(withOutlier);
-    const chosen = consensus.canonicalPool?.pairAddress;
-    const observation = consensus.observations.find((o) => o.pairAddress === chosen);
-
-    expect(observation?.accepted).toBe(true);
-    expect(observation?.priceUsd).toBeLessThan(2);
-  });
-});
-
-describe("market cap and fully diluted valuation stay distinct", () => {
-  const supplyUi = 1_000_000;
-  const half = market(
-    cluster(2, 4).map((p) => ({ ...p, marketCap: 2 * (supplyUi / 2), priceUsd: 2 })),
-  );
-
-  it("builds market cap from the canonical price and implied circulating supply", () => {
-    const cap = marketCap(half, supplyUi);
-    // Half the supply circulating at $2 is a $1M cap, not the $2M fully diluted.
-    expect(cap).toBeCloseTo(1_000_000, 0);
-  });
-
-  it("builds fully diluted value from the same price and the on-chain total", () => {
-    expect(fullyDilutedValuation(half, supplyUi)).toBeCloseTo(2_000_000, 0);
-  });
-
-  it("never substitutes one for the other", () => {
-    expect(marketCap(half, supplyUi)).not.toBe(fullyDilutedValuation(half, supplyUi));
-  });
-
-  it("withholds a market cap implying more circulating supply than exists", () => {
-    const impossible = market(
-      cluster(1, 4).map((p) => ({ ...p, priceUsd: 1, marketCap: 50_000_000 })),
-    );
-    // 50M circulating claimed against a 1M supply: the claim is about some
-    // other token, so no figure is published.
-    expect(marketCap(impossible, supplyUi)).toBeNull();
-    // The fully diluted value is still computable, because it uses our supply.
-    expect(fullyDilutedValuation(impossible, supplyUi)).toBeCloseTo(1_000_000, 0);
-  });
-
-  it("withholds both when no market could be trusted", () => {
-    const dust = market([pool({ liquidityUsd: 5 })]);
-    expect(marketCap(dust, supplyUi)).toBeNull();
-    expect(fullyDilutedValuation(dust, supplyUi)).toBeNull();
-  });
-});
-
-describe("empty and degenerate markets", () => {
-  it("reports nothing when the provider failed", () => {
-    const consensus = buildConsensus({
-      available: false,
-      pairs: [],
-      name: null,
-      symbol: null,
-      imageUrl: null,
-      websites: [],
-      socials: [],
-      error: "down",
-    });
-    expect(consensus.priceUsd).toBeNull();
-    expect(consensus.confidence).toBe("none");
-  });
-
-  it("reports nothing when the token has no pools at all", () => {
-    expect(buildConsensus(market([])).priceUsd).toBeNull();
+  it("M: quote-side USD history is selected by mint, with duplicate and foreign candles rejected",()=>{
+    const body={meta:{base:{address:MINT},quote:{address:USDC}},data:{attributes:{ohlcv_list:Array.from({length:6},(_,i)=>[(NOW-i*300000)/1000,0,0,0,1])}}};
+    const h=normalizeHistory(body,USDC,POOL,NOW,"https://fixture.invalid?token="+USDC);
+    expect(h.available).toBe(true);expect(h.side).toBe("quote");expect(h.points.at(-1)!.p).toBe(1);
+    expect(normalizeHistory(body,OTHER,POOL,NOW,"").available).toBe(false);
+    body.data.attributes.ohlcv_list.push([NOW/1000,0,0,0,2]);
+    expect(normalizeHistory(body,USDC,POOL,NOW,"").available).toBe(false);
   });
 });

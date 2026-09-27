@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import type { PricePoint } from "@/lib/providers/geckoterminal";
 import type { RiskReport } from "@/lib/risk-engine/types";
@@ -8,148 +8,28 @@ import { formatPrice } from "@/lib/format";
 
 import styles from "./MarketContextChart.module.css";
 
-/**
- * Four hours of real price movement for the analysed mint.
- *
- * Fetched after the report renders, from the pool the report already treats as
- * canonical, so the line and the price shown elsewhere describe the same
- * market. It is deliberately loaded separately: a verdict must never wait on a
- * chart, and a chart that cannot be drawn must not damage the verdict.
- *
- * It is context, not evidence. No part of this series reaches the risk engine,
- * and the caption under the chart says so — a token being down this afternoon
- * is not a risk signal, and the product should not let the two blur.
- *
- * "Unavailable" is a first-class outcome here, as everywhere else: if the pool
- * has too few trades, or the series contradicts the canonical price, the panel
- * says so rather than drawing a line that implies knowledge nobody has.
- */
-
-/** Beyond this, the history and the current price are not the same market. */
-const MAX_PRICE_DIVERGENCE = 0.25;
-
-type State =
-  | { status: "loading" }
-  | { status: "ready"; points: PricePoint[] }
-  | { status: "unavailable"; reason: string };
-
+/** History has already been checked on the server before scoring. */
 export default function MarketContextChart({ report }: { report: RiskReport }) {
-  const { mint } = report.overview;
-  const { poolAddress, poolDex, priceUsd } = report.market;
-
-  /*
-   * Keyed on the market being charted, so analysing another token remounts
-   * the body rather than leaving the previous token's line on screen while
-   * the new one loads. It also means the loading state is an initial value
-   * rather than something an effect has to set.
-   */
-  return (
-    <ChartBody
-      key={`${mint}:${poolAddress ?? "none"}`}
-      mint={mint}
-      poolAddress={poolAddress}
-      poolDex={poolDex}
-      priceUsd={priceUsd}
-    />
-  );
-}
-
-function ChartBody({
-  mint,
-  poolAddress,
-  poolDex,
-  priceUsd,
-}: {
-  mint: string;
-  poolAddress: string | null;
-  poolDex: string | null;
-  priceUsd: number | null;
-}) {
-  const [state, setState] = useState<State>(() =>
-    poolAddress
-      ? { status: "loading" }
-      : { status: "unavailable", reason: "No indexed market pool for this token." },
-  );
-
-  useEffect(() => {
-    if (!poolAddress) return;
-
-    const controller = new AbortController();
-    const url = `/api/history?mint=${encodeURIComponent(mint)}&pool=${encodeURIComponent(poolAddress)}`;
-
-    fetch(url, { signal: controller.signal })
-      .then((response) => response.json())
-      .then((body: { available?: boolean; points?: PricePoint[]; error?: string }) => {
-        if (!body?.available || !Array.isArray(body.points) || body.points.length === 0) {
-          setState({
-            status: "unavailable",
-            reason: body?.error ?? "No price history could be retrieved.",
-          });
-          return;
-        }
-
-        /*
-         * The series has to agree with the price the rest of the page shows.
-         * They come from different providers reading the same pool, so a large
-         * gap means one of them is describing something else — and a chart
-         * that ends somewhere the stated price is not would be worse than no
-         * chart at all.
-         */
-        const last = body.points[body.points.length - 1].p;
-        if (priceUsd !== null && priceUsd > 0) {
-          const divergence = Math.abs(last - priceUsd) / priceUsd;
-          if (divergence > MAX_PRICE_DIVERGENCE) {
-            setState({
-              status: "unavailable",
-              reason: "Price history disagreed with the current price and was discarded.",
-            });
-            return;
-          }
-        }
-
-        setState({ status: "ready", points: body.points });
-      })
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        setState({ status: "unavailable", reason: "Price history could not be loaded." });
-      });
-
-    return () => controller.abort();
-  }, [mint, poolAddress, priceUsd]);
-
+  const { history, historyStatus, historyReason, poolDex } = report.market;
+  const ready = history?.available && historyStatus === "consistent";
   return (
     <section className={styles.panel} aria-label="4 hour market context">
       <header className={styles.head}>
-        <div>
-          <div className="eyebrow">4H market context</div>
-          {state.status === "ready" && <Change points={state.points} />}
+        <div><div className="eyebrow">4H market context</div>
+          {ready && <Change points={history.points} />}
         </div>
-        {poolDex && state.status === "ready" && (
-          <span className={styles.source}>via {poolDex}</span>
-        )}
+        {ready && poolDex && <span className={styles.source}>via {poolDex}</span>}
       </header>
-
-      {state.status === "loading" && (
-        <div className={styles.placeholder} role="status">
-          <span className={`shimmer ${styles.placeholderText}`}>Loading price history…</span>
-        </div>
-      )}
-
-      {state.status === "unavailable" && (
+      {ready ? <Plot points={history.points} /> : (
         <div className={styles.placeholder}>
-          <span className={styles.absentTitle}>4H price history unavailable</span>
-          <span className={styles.absentReason}>{state.reason}</span>
+          <span className={styles.absentTitle}>{historyStatus === "conflict" || report.market.status === "conflict" ? "Market data conflict" : "4H price history unavailable"}</span>
+          <span className={styles.absentReason}>{report.market.status === "conflict" ? report.market.reason : historyReason}</span>
         </div>
       )}
-
-      {state.status === "ready" && <Plot points={state.points} />}
-
-      <p className={styles.caption}>Market context — not part of the risk score</p>
+      <p className={styles.caption}>Market context · contradictions affect data validation; the four-hour return is not scored.</p>
     </section>
   );
 }
-
-/* -------------------------------------------------------------------------- */
 
 function Change({ points }: { points: PricePoint[] }) {
   const first = points[0].p;

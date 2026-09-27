@@ -13,12 +13,12 @@ import {
   marketCap,
   pairsByLiquidity,
   totalLiquidity,
-} from "../../providers/dexscreener";
+} from "../../market/access";
 
 const CATEGORY = "Liquidity" as const;
 
 const NO_MARKET_DATA = (error: string | undefined) =>
-  `Market data could not be retrieved from DexScreener. ${error ?? ""}`.trim();
+  `Independent market measurement is unavailable. ${error ?? ""}`.trim();
 
 /** Bands are descending: a larger value is safer. */
 const DEPTH_BANDS: readonly Band[] = [
@@ -80,10 +80,10 @@ function capSeverity(severity: Severity, liquidityUsd: number): Severity {
 export function liquidityDepthRule({ marketData }: AnalysisInput): RiskSignal {
   const ID = "liquidity-depth";
   const LABEL = "Liquidity Depth";
-  const METRIC = "Total USD liquidity across all pools";
+  const METRIC = "Total USD liquidity across corroborated pools";
   const MAX_POINTS = 16;
 
-  if (!marketData.available) {
+  if (!marketData.available || totalLiquidity(marketData) === null) {
     return unavailable({
       id: ID,
       label: LABEL,
@@ -94,22 +94,7 @@ export function liquidityDepthRule({ marketData }: AnalysisInput): RiskSignal {
     });
   }
 
-  if (marketData.pairs.length === 0) {
-    return signal({
-      id: ID,
-      label: LABEL,
-      category: CATEGORY,
-      metric: METRIC,
-      maxPoints: MAX_POINTS,
-      severity: "critical",
-      observedValue: "No DEX pools found",
-      explanation:
-        "No liquidity pool for this token was found on any DEX indexed by DexScreener. There is no observable market to buy or sell into: the token may be brand new, delisted, or untradeable. Note that a token can exist perfectly legitimately without a public pool — but it cannot be traded.",
-      evidence: [{ label: "Pools found", value: "0" }],
-    });
-  }
-
-  const liquidity = totalLiquidity(marketData);
+  const liquidity = totalLiquidity(marketData)!;
   const severity = classifyDescending(liquidity, DEPTH_BANDS);
   const pools = pairsByLiquidity(marketData);
 
@@ -133,8 +118,8 @@ export function liquidityDepthRule({ marketData }: AnalysisInput): RiskSignal {
     observedValue: `${usd(liquidity)} across ${plural(pools.length, "pool")}`,
     explanation:
       severity === "none"
-        ? `Total liquidity across all detected pools is ${usd(liquidity)}, deep enough to absorb ordinary trade sizes without severe price impact.`
-        : `Total liquidity across all detected pools is only ${usd(liquidity)}. Trades of any meaningful size will move the price significantly, and exiting a large position may not be possible at the quoted price.`,
+        ? `Total liquidity across independently corroborated pools is ${usd(liquidity)}, deep enough to absorb ordinary trade sizes without severe price impact.`
+        : `Total liquidity across independently corroborated pools is only ${usd(liquidity)}. Trades of any meaningful size will move the price significantly, and exiting a large position may not be possible at the quoted price.`,
     evidence,
   });
 }
@@ -157,7 +142,7 @@ export function liquidityRatioRule({ marketData, mintInfo }: AnalysisInput): Ris
     : null;
   const liquidity = marketData.available ? totalLiquidity(marketData) : 0;
 
-  if (!marketData.available || cap === null || cap <= 0) {
+  if (!marketData.available || cap === null || cap <= 0 || liquidity === null) {
     return unavailable({
       id: ID,
       label: LABEL,
@@ -165,7 +150,7 @@ export function liquidityRatioRule({ marketData, mintInfo }: AnalysisInput): Ris
       metric: METRIC,
       maxPoints: MAX_POINTS,
       reason: marketData.available
-        ? "No market capitalisation is available for this token, so liquidity cannot be expressed as a share of it. This normally means the token has no indexed pool in which it is the base asset."
+        ? "Price, circulating supply and reserves must each be independently validated to measure this ratio."
         : NO_MARKET_DATA(marketData.error),
     });
   }
@@ -211,7 +196,7 @@ export function poolDiversityRule({ marketData }: AnalysisInput): RiskSignal {
   const MAX_POINTS = 6;
   const MEANINGFUL_USD = 1_000;
 
-  if (!marketData.available) {
+  if (!marketData.available || totalLiquidity(marketData) === null) {
     return unavailable({
       id: ID,
       label: LABEL,
@@ -225,7 +210,7 @@ export function poolDiversityRule({ marketData }: AnalysisInput): RiskSignal {
   const meaningful = pairsByLiquidity(marketData).filter(
     (pair) => pair.liquidityUsd >= MEANINGFUL_USD,
   );
-  const total = totalLiquidity(marketData);
+  const total = totalLiquidity(marketData)!;
   const topShare = total > 0 && meaningful.length > 0 ? meaningful[0].liquidityUsd / total : 1;
 
   const severity =
@@ -250,9 +235,9 @@ export function poolDiversityRule({ marketData }: AnalysisInput): RiskSignal {
         : `${plural(meaningful.length, "pool")}, deepest holds ${pct(topShare, 1)}`,
     explanation:
       meaningful.length === 0
-        ? `No single pool holds more than ${usd(MEANINGFUL_USD)} in liquidity. There is no venue where this token can be traded in any meaningful size.`
+        ? `No corroborated pool holds more than ${usd(MEANINGFUL_USD)} in liquidity. Other venues may exist outside this measured subset.`
         : meaningful.length === 1
-          ? `This token's entire tradable market is a single pool on ${meaningful[0].dexId}. If that pool's liquidity is withdrawn, trading stops entirely — this is the structure a liquidity rug-pull depends on.`
+          ? `The corroborated pool subset contains a single pool on ${meaningful[0].dexId}. If that pool's liquidity is withdrawn, trading stops entirely — this is the structure a liquidity rug-pull depends on.`
           : `Liquidity is spread across ${plural(meaningful.length, "pool")}, with the deepest holding ${pct(topShare, 1)} of the total. Multiple independent venues mean trading does not depend on any single pool remaining funded.`,
     evidence: [
       { label: `Pools above ${usd(MEANINGFUL_USD)}`, value: String(meaningful.length) },

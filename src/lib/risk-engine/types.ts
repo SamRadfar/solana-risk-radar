@@ -1,3 +1,4 @@
+import type { MarketValidation, ValidationState, PriceHistory } from "../market/types";
 /**
  * Shared types for the risk engine and the data it consumes.
  * These are the contract between data providers, the scoring engine, and the UI.
@@ -160,8 +161,8 @@ export interface Distribution {
 /**
  * Market figures for display, carried alongside the report.
  *
- * Every field is produced by the existing aggregate helpers in the market
- * provider — nothing here is recomputed, re-derived or independently sourced.
+ * Every field is produced by the provider-independent validation layer.
+ * This display contract never selects another source or reconstructs a price.
  * It exists so the UI can show what the engine already measured without
  * scraping it back out of signal text.
  *
@@ -170,6 +171,14 @@ export interface Distribution {
  * disagree with itself.
  */
 export interface MarketSnapshot {
+  status: ValidationState;
+  reason: string;
+  changeState: ValidationState;
+  capState: ValidationState;
+  fdvState: ValidationState;
+  history: PriceHistory | null;
+  historyStatus: "consistent" | "conflict" | "unavailable";
+  historyReason: string;
   /** False when the market provider returned nothing for this mint. */
   available: boolean;
   priceUsd: number | null;
@@ -180,9 +189,8 @@ export interface MarketSnapshot {
   volume24hUsd: number | null;
   poolCount: number;
   /**
-   * The pool the canonical price came from. Carried so the market-context
-   * chart reads the same market the price does, and so that reading stays
-   * traceable to a source.
+   * Identified provider pool selected for history, with provenance. A single
+   * pool never establishes the canonical market price.
    */
   poolAddress: string | null;
   /** That pool's DEX, for attribution. */
@@ -196,37 +204,7 @@ export interface MarketSnapshot {
  * can be traced to the pool that produced it and the rule that admitted or
  * rejected it, without re-running the analysis by hand.
  */
-export interface MarketDiagnostics {
-  method: string;
-  confidence: "high" | "medium" | "low" | "none";
-  consideredPools: number;
-  acceptedPools: number;
-  rejectedPools: number;
-  /** Liquidity-weighted mean relative deviation across accepted markets. */
-  dispersion: number | null;
-  /** Share of priced liquidity standing behind the accepted cluster. */
-  liquidityShare: number | null;
-  canonicalPriceUsd: number | null;
-  /** The inputs each valuation was built from, stated separately. */
-  marketCapInputs: { priceUsd: number; circulatingSupply: number } | null;
-  fullyDilutedInputs: { priceUsd: number; totalSupply: number } | null;
-  supplySource: string;
-  totalSupplyUi: number;
-  /** The pool the 4h history is read from; always an accepted one. */
-  historyPool: string | null;
-  pools: {
-    dexId: string;
-    pairAddress: string | null;
-    quoteSymbol: string | null;
-    priceUsd: number;
-    liquidityUsd: number;
-    volume24hUsd: number;
-    weight: number;
-    accepted: boolean;
-    rejection?: string;
-    deviation?: number;
-  }[];
-}
+export type MarketDiagnostics = MarketValidation;
 
 // ---------------------------------------------------------------------------
 // Liquidity safety — verified LP lock and burn state.

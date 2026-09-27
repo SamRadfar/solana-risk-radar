@@ -57,6 +57,13 @@ for (const viewport of VIEWPORTS) {
   );
   check(await page.locator("#mint-address").isVisible(), "address input renders");
 
+  // A new browser session receives the existing welcome tour. Dismiss through
+  // its real control before testing the analyser; do not force clicks through it.
+  const closeTour = page.getByRole("button", { name: "Close product tour", exact: true });
+  await closeTour.waitFor({ state: "visible", timeout: 8000 });
+  await closeTour.click();
+  await closeTour.waitFor({ state: "hidden" });
+
   // Invalid input must be rejected in the browser, with no request made.
   await page.locator("#mint-address").fill("not-a-valid-address");
   await page.locator("#mint-address").blur();
@@ -70,13 +77,24 @@ for (const viewport of VIEWPORTS) {
 
   // Full analysis flow.
   await page.locator("#mint-address").fill(TOKEN);
+  const reportResponse = page.waitForResponse(r => r.url().includes("/api/analyze?"));
   await page.locator('form button[type="submit"]').click();
+  const apiReport = await (await reportResponse).json();
 
   await page
     .getByRole("heading", { name: /Risk profile by category/i })
     .waitFor({ state: "visible", timeout: 90_000 });
 
   check(true, "report renders after analysis");
+  check(await page.locator("[data-market-status]").getAttribute("data-market-status") === apiReport.market.status,
+    "hero explicitly states the API market validation state");
+  check(apiReport.market.priceUsd === apiReport.overview.priceUsd, "hero and snapshot use one canonical price");
+  if (apiReport.market.status !== "validated") {
+    check(apiReport.market.priceUsd === null && apiReport.market.marketCapUsd === null && apiReport.market.fullyDilutedUsd === null,
+      "unverified market valuation is withheld");
+    check(await page.getByRole("region", { name: "Token to USD converter" }).count() === 0,
+      "unverified price cannot drive the converter");
+  }
 
   // ---- Quick assessment layer ----
   check(

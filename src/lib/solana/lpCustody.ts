@@ -14,7 +14,7 @@ import {
   NO_LP_TOKEN_PROGRAMS,
   classifyLpHolder,
 } from "./lpControl";
-import type { MarketPair } from "../providers/dexscreener";
+import type { MarketPair } from "../market/types";
 import { aggregateLiquiditySafety } from "../market/liquiditySafety";
 import type {
   LiquiditySafety,
@@ -479,4 +479,3 @@ interface ParsedTokenAccountInfo {
   mint?: string;
   state?: string;
 }
-

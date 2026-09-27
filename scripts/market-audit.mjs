@@ -1,95 +1,109 @@
 /**
- * Live market-data audit.
- *
- * Runs the real analysis endpoint against a fixed token set and prints the
- * consensus diagnostics for each, so a release can be eyeballed against
- * independent references before it ships. Not part of `vitest run`: it needs
- * the network and real prices move.
- *
- * Usage: node scripts/market-audit.mjs [baseUrl]
+ * Live external validity audit. Default: real analysis endpoint.
+ * node scripts/market-audit.mjs http://127.0.0.1:3450
+ * node scripts/market-audit.mjs --providers-only [--new-mint=<address>]
+ * providers-only runs the SAME production service, without RPC/supply/scoring;
+ * requires Node >=22.15 (in-memory TypeScript module hooks, no generated code).
  */
-const BASE = process.argv[2] ?? "http://127.0.0.1:3450";
+import { writeFile } from "node:fs/promises";
 
+const providerOnly = process.argv.includes("--providers-only");
+const BASE = process.argv.find(a => /^https?:/.test(a)) ?? "http://127.0.0.1:3450";
 const TOKENS = [
-  ["SOL   ", "So11111111111111111111111111111111111111112"],
-  ["USDC  ", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"],
-  ["JUP   ", "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"],
-  ["BONK  ", "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"],
-  ["WIF   ", "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"],
-  ["PYUSD ", "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo"],
-  ["PUMP  ", "DqSpieUuFtJqKDuUiLYvBLVR2B8UYErSd2FhtknKpump"],
+  ["SOL", "So11111111111111111111111111111111111111112"],
+  ["USDC", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"],
+  ["JUP", "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"],
+  ["BONK", "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"],
+  ["WIF", "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"],
+  ["PYUSD", "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo"],
 ];
-
-const usd = (v) =>
-  v === null || v === undefined ? "—" : v >= 1e9 ? `$${(v / 1e9).toFixed(2)}B` : v >= 1e6 ? `$${(v / 1e6).toFixed(2)}M` : v >= 1e3 ? `$${(v / 1e3).toFixed(1)}K` : `$${v.toFixed(4)}`;
-const px = (v) => (v === null ? "—" : v >= 1 ? `$${v.toFixed(4)}` : `$${v.toPrecision(4)}`);
-
-let failures = 0;
-const check = (ok, label, detail = "") => {
-  if (!ok) failures += 1;
-  console.log(`      ${ok ? "ok  " : "FAIL"} ${label}${detail ? ` — ${detail}` : ""}`);
-};
-
-for (const [name, mint] of TOKENS) {
-  const res = await fetch(`${BASE}/api/analyze?address=${mint}`);
-  if (!res.ok) {
-    console.log(`\n${name} HTTP ${res.status}`);
-    failures += 1;
-    continue;
-  }
-  const r = await res.json();
-  const d = r.diagnostics;
-  const m = r.market;
-
-  console.log(`\n${name} ${r.overview.symbol ?? "?"} · ${r.overview.name ?? "unnamed"}`);
-  console.log(`   price ${px(m.priceUsd)}  conf=${d.confidence}  pools ${d.acceptedPools}/${d.consideredPools} accepted` +
-    `  dispersion=${d.dispersion === null ? "—" : (d.dispersion * 100).toFixed(2) + "%"}` +
-    `  liq share=${d.liquidityShare === null ? "—" : (d.liquidityShare * 100).toFixed(0) + "%"}`);
-  console.log(`   mcap ${usd(m.marketCapUsd)}  fdv ${usd(m.fullyDilutedUsd)}  liq ${usd(m.liquidityUsd)}  vol ${usd(m.volume24hUsd)}  24h ${m.priceChange24hPercent === null ? "—" : m.priceChange24hPercent.toFixed(2) + "%"}`);
-  console.log(`   decimals=${r.overview.decimals} supply=${r.overview.supplyUi.toLocaleString()} program=${r.overview.tokenProgram}`);
-
-  const rejected = d.pools.filter((p) => !p.accepted);
-  if (rejected.length) {
-    const reasons = {};
-    for (const p of rejected) reasons[p.rejection] = (reasons[p.rejection] ?? 0) + 1;
-    console.log(`   rejected: ${Object.entries(reasons).map(([k, v]) => `${v}x ${k}`).join(" · ")}`);
-  }
-
-  // --- invariants that must hold for every token ---
-  check(r.overview.mint === mint, "identity is the analysed mint");
-  if (m.priceUsd !== null) {
-    check(m.priceUsd > 0 && Number.isFinite(m.priceUsd), "price is a usable number");
-    const accepted = d.pools.filter((p) => p.accepted);
-    const worst = Math.max(...accepted.map((p) => Math.abs(p.priceUsd - m.priceUsd) / m.priceUsd));
-    check(worst <= 0.3, "every accepted pool is within tolerance of the consensus", `worst ${(worst * 100).toFixed(1)}%`);
-  }
-  if (m.marketCapUsd !== null && m.fullyDilutedUsd !== null) {
-    check(m.marketCapUsd <= m.fullyDilutedUsd * 1.02, "market cap does not exceed fully diluted value");
-  }
-  if (m.marketCapUsd !== null && m.priceUsd !== null && r.overview.supplyIsMeaningful) {
-    const implied = m.marketCapUsd / m.priceUsd;
-    check(implied <= r.overview.supplyUi * 1.02, "implied circulating supply fits inside total supply",
-      `${implied.toExponential(2)} vs ${r.overview.supplyUi.toExponential(2)}`);
-  }
-  if (m.fullyDilutedUsd !== null && m.priceUsd !== null) {
-    check(Math.abs(m.fullyDilutedUsd - m.priceUsd * r.overview.supplyUi) / m.fullyDilutedUsd < 1e-6,
-      "fully diluted value equals price x on-chain supply");
-  }
-  check(d.historyPool === null || d.pools.some((p) => p.pairAddress === d.historyPool && p.accepted),
-    "4h history pool is one the consensus accepted");
-
-  // 4h chart endpoint must agree with the canonical price
-  if (m.poolAddress && m.priceUsd) {
-    const h = await fetch(`${BASE}/api/history?mint=${mint}&pool=${m.poolAddress}`).then((x) => x.json());
-    if (h.available) {
-      const last = h.points[h.points.length - 1].p;
-      const gap = Math.abs(last - m.priceUsd) / m.priceUsd;
-      check(gap < 0.25, "4h chart ends near the canonical price", `${(gap * 100).toFixed(2)}% apart, ${h.points.length} points`);
-    } else {
-      console.log(`      --   4h history unavailable: ${h.error}`);
-    }
-  }
+const extra = process.argv.find(a => a.startsWith("--new-mint="))?.split("=")[1];
+if (extra) TOKENS.push(["NEW", extra]);
+const output = process.argv.find(a => a.startsWith("--output="))?.slice(9);
+let getMarketData, policy;
+if (providerOnly) {
+  const { registerHooks, stripTypeScriptTypes } = await import("node:module");
+  const { readFileSync, existsSync } = await import("node:fs");
+  registerHooks({
+    resolve(specifier, context, next) {
+      if (specifier.startsWith(".") && context.parentURL) {
+        const url = new URL(specifier, context.parentURL);
+        if (!/\.[a-z]+$/i.test(url.pathname) && existsSync(new URL(url.href + ".ts")))
+          return { url: url.href + ".ts", shortCircuit: true };
+      }
+      return next(specifier, context);
+    },
+    load(url, context, next) {
+      if (url.endsWith(".ts")) return { format: "module", source: stripTypeScriptTypes(readFileSync(new URL(url), "utf8")), shortCircuit: true };
+      return next(url, context);
+    },
+  });
+  ({ getMarketData } = await import("../src/lib/market/service.ts"));
+  policy = await import("../src/lib/market/policy.ts");
 }
+const distance = (a,b) => Math.min(a,b)>0 ? Math.max(a,b)/Math.min(a,b)-1 : Infinity;
+let failures=0, unavailable=0;
+const results=[];
+const check=(ok,label)=> { if(!ok){ failures++; console.log("  FAIL "+label); } };
+for (const [name,mint] of TOKENS) {
+  try {
+    let d, market, headers, signals;
+    if (providerOnly) {
+      d=(await getMarketData(mint,null)).validation;
+      market={priceUsd:d.price.value,marketCapUsd:d.marketCap.value,fullyDilutedUsd:d.fdv.value,priceChange24hPercent:d.change24h.value};
+    } else {
+      const response=await fetch(BASE+"/api/analyze?address="+encodeURIComponent(mint),{signal:AbortSignal.timeout(120000)});
+      headers={cache:response.headers.get("x-cache"),version:response.headers.get("x-market-version")};
+      if(!response.ok) throw Error("Analysis HTTP "+response.status);
+      const report=await response.json(); d=report.diagnostics; market=report.market; signals=report.signals;
+      check(report.overview.mint===mint,"requested mint identity");
+    }
+    check(d.version==="market-integrity-v2.0","expected algorithm version");
+    if (!d.price || !Array.isArray(d.providers)) throw Error("Old/malformed validation diagnostics");
+    console.log("\n"+name+" "+d.status+" price="+(market.priceUsd??"WITHHELD")+" confidence="+d.confidence);
+    console.log("  cap="+d.marketCap.status+" fdv="+d.fdv.status+" 24h="+d.change24h.status+" disagreement="+d.price.disagreement);
+    for(const p of d.providers) console.log("  "+p.provider+": "+p.status+" price="+p.priceUsd+" candidates="+JSON.stringify(p.candidatePrices)+" errors="+p.errors.join("; "));
+    console.log("  "+d.price.reason+"; history="+d.historyCheck.status);
+    check(market.priceUsd===d.price.value,"published price equals validated measurement");
+    if(d.status!=="validated") {
+      check(market.priceUsd===null&&market.marketCapUsd===null&&market.fullyDilutedUsd===null,"unverified/conflicting valuation withheld");
+    } else {
+      const sources=d.price.sources.filter(s=>s.value!==null);
+      check(new Set(sources.map(s=>s.provider)).size>=2,"at least two provider opinions");
+      check(!d.providers.some(p=>p.status==="conflict"),"no hidden provider conflict");
+      check(sources.every(s=>distance(s.value,market.priceUsd)<=.05+1e-12),"provider values corroborate canonical price");
+    }
+    check(market.priceChange24hPercent===d.change24h.value,"single 24h display pipeline");
+    if(signals) {
+      const signal=signals.find(s=>s.id==="price-volatility");
+      check(d.change24h.status==="validated" ? signal.status==="ok" && signal.observedValue===(d.change24h.value>=0?"+":"")+d.change24h.value.toFixed(2)+"% in 24h" : signal.status==="unavailable","24h scoring agrees with validation");
+    }
 
-console.log(`\n${failures === 0 ? "All live invariants held." : `${failures} live invariant failure(s).`}`);
-process.exit(failures === 0 ? 0 : 1);
+    // Fresh external observation, not an arithmetic self-consistency check.
+    const refUrl="https://api.geckoterminal.com/api/v2/networks/solana/tokens/"+encodeURIComponent(mint);
+    let refResponse=await fetch(refUrl,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(12000)});
+    const externalAttempts=[refResponse.status];
+    if(refResponse.status===429) {
+      console.log("  External service rate-limited; one paced retry in 45 seconds");
+      await new Promise(resolve=>setTimeout(resolve,45000));
+      refResponse=await fetch(refUrl,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(12000)});
+      externalAttempts.push(refResponse.status);
+    }
+    const refBody=await refResponse.json();
+    const token=refBody.data;
+    const external=refResponse.ok&&token?.id==="solana_"+mint&&token?.attributes?.address===mint ? Number(token.attributes.price_usd) : null;
+    const externalPrice=Number.isFinite(external)&&external>0?external:null;
+    const gap=market.priceUsd!==null&&externalPrice!==null?distance(market.priceUsd,externalPrice):null;
+    if(externalPrice===null){unavailable++; console.log("  External check UNAVAILABLE (HTTP "+refResponse.status+")");}
+    else if(gap!==null){check(gap<=(policy?.PRICE_AGREEMENT_TOLERANCE??.05),"fresh external token price corroborates published price"); console.log("  external="+externalPrice+" gap="+gap);}
+    else console.log("  external="+externalPrice+"; canonical withheld, no claim of accuracy");
+    results.push({name,mint,at:new Date().toISOString(),mode:providerOnly?"providers-only":"full-analysis",headers,external:{url:refUrl,status:refResponse.status,attempts:externalAttempts,price:externalPrice,gap},validation:d});
+  } catch(error) {
+    failures++; results.push({name,mint,error:String(error)}); console.log("\n"+name+" ERROR "+String(error));
+  }
+  // Free-tier pacing: at most six GT calls per token, then forty-five seconds.
+  if(name!==TOKENS.at(-1)[0]) await new Promise(resolve=>setTimeout(resolve,45000));
+}
+if(output) await writeFile(output,JSON.stringify({failures,externalUnavailable:unavailable,results},null,2)+"\n");
+console.log("\nAudit completed: "+failures+" failures; "+unavailable+" unavailable external checks. Withheld/conflict states are not accuracy confirmations.");
+process.exitCode=failures?1:unavailable?2:0;

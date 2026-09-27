@@ -224,6 +224,13 @@ export default function VerdictHero({ report }: { report: RiskReport }) {
           <MarketContextChart report={report} />
         </div>
 
+        <p className="mt-5 text-xs" style={{ color: "var(--ink-secondary)" }} data-market-status={report.market.status}>
+          {{ validated: "Market price validated across providers.",
+            single_source: "Single-source market data — price and valuations withheld.",
+            conflict: "Market data conflict — price and valuations withheld.",
+            unavailable: "Market data unavailable — price and valuations withheld." }[report.market.status]}
+        </p>
+
         {/* Token facts */}
         <div
           className="mt-6 pt-5 grid grid-cols-2 sm:grid-cols-4 gap-4"
