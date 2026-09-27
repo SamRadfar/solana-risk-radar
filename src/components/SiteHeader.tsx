@@ -43,7 +43,7 @@ const RESULT_NAV: NavItem[] = [
 
 /*
  * Where "How scoring works" leads, per state. Neither is a new section: the
- * landing's signal lanes name the five dimensions and the 14 signals, and the
+ * landing's signal lanes name the five dimensions and the 13 signals, and the
  * report's category profile shows how each one was weighted and charged. The
  * CTA connects the existing explanations rather than adding a page.
  */

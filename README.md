@@ -48,7 +48,7 @@ Built for the Superteam Germany **Road to Colosseum Hackathon**.
 
 Solana Risk Radar takes any SPL or Token-2022 mint address and produces an **explainable risk
 report** in seconds. It reads real on-chain and market data at request time, runs it through
-fourteen deterministic rules with published thresholds, and shows exactly which signals drove
+thirteen deterministic rules with published thresholds, and shows exactly which signals drove
 the result.
 
 - **No LLM decides anything.** Every number comes from a published rule with a published
@@ -80,7 +80,7 @@ Validation               canonical mint identity, multi-pool consensus, outlier 
    ↓
 Evidence resolution      token accounts → owning wallets → controlling program
    ↓
-Risk analysis            14 deterministic rules across 5 equally weighted categories
+Risk analysis            13 deterministic rules across 5 equally weighted categories
    ↓
 Explainable report       score · verdict · main concerns · full evidence · provenance
 ```
@@ -106,7 +106,7 @@ Full detail: [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`METHODOLOGY.md`](METHODOL
 | **Liquidity analysis** | Total depth, depth vs market cap, pool diversity |
 | **Liquidity Safety** | Per-pool LP custody — burned, frozen, lock program, staked, wallet or unknown |
 | **Market activity** | Volume vs liquidity, buy/sell balance, 24h price movement |
-| **Maturity** | Pool age and token age, with age reported as unmeasured where it cannot be resolved |
+| **Maturity** | Pool age, reported as unmeasured when no corroborated pool timestamp is available |
 | **Evidence provenance** | Every signal carries well-formed, absolute-https evidence matching the exact claim it makes |
 | **Multi-provider resolution** | Separate provider opinions, independent agreement, explicit conflict/unverified states |
 | **Coverage & confidence** | Both reported on the face of the report, never implied |
@@ -238,9 +238,8 @@ Risk Radar is built to be trustworthy about what it does *not* know:
 - **A single severe finding does not max the score.** One fully compromised category scores 45
   of 100 — deliberately. Two reach "High". The specific danger is surfaced in "Main concerns"
   rather than inflated into the headline number.
-- **Token age is often unknowable.** It is derived from signature history; a heavily traded
-  token has more history than can be scanned, so its age is reported as unmeasured rather than
-  guessed. A *new* token resolves exactly — which is the case that matters.
+- **Pool age requires a measured timestamp.** When no independently corroborated pool
+  creation timestamp is available, maturity is unmeasured and excluded from scoring.
 - **Pool and burn shares cover the largest accounts only**, not the whole supply. The UI says so
   where it matters.
 - **Market data reflects what DexScreener has indexed.** A token with no indexed pool shows "no
@@ -266,7 +265,7 @@ time and nothing is stored.
 
 | Source | Used for | Auth |
 |---|---|---|
-| **Solana JSON-RPC** | Mint account, token accounts and their owners, account states, SPL multisig decoding, signature history | None — a built-in list of public endpoints with automatic failover, or your own via `SOLANA_RPC_URL` |
+| **Solana JSON-RPC** | Mint account, token accounts and their owners, account states, SPL multisig decoding | None — a built-in list of public endpoints with automatic failover, or your own via `SOLANA_RPC_URL` |
 | **Metaplex / Token-2022 metadata** | Name, symbol, update authority, mutability, extensions | None — read directly from chain |
 | **DexScreener** | Pools, liquidity, volume, trade counts, pool age, quoted prices | None — free public API |
 | **GeckoTerminal** | 4-hour OHLCV for the market context chart | None — free public API |

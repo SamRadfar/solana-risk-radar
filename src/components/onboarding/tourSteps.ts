@@ -75,7 +75,7 @@ export const PRODUCT_TOUR: TourDefinition = {
       id: "verdict",
       title: "A score, and the reason for it",
       description:
-        "Fourteen deterministic rules across five equally weighted categories produce a 0–100 score and a plain-language verdict. It reports measurable risk signals — it never certifies a token as safe, or as a scam.",
+        "Thirteen deterministic rules across five equally weighted categories produce a 0–100 score and a plain-language verdict. It reports measurable risk signals — it never certifies a token as safe, or as a scam.",
       visual: {
         src: "/tour/verdict.webp",
         alt: "A report verdict: a risk score of 13 out of 100, the classification Low Risk Signals, and counts by severity",

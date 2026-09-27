@@ -236,7 +236,7 @@ score summarises the profile, the concerns list surfaces the specific danger.
 
 ## 4. The rules
 
-Total weight **162** across 14 rules in 5 categories. Remember that weights
+Total weight **152** across 13 rules in 5 categories. Remember that weights
 matter only *within* a category.
 
 ### Authorities — 58 points across 4 rules
@@ -425,7 +425,7 @@ not a price prediction.
 
 ---
 
-### Maturity — 22 points across 2 rules
+### Maturity — 12 points across 1 rule
 
 #### `pool-maturity` — weight 12
 | Age | Severity |
@@ -436,21 +436,10 @@ not a price prediction.
 | 1–7 days | `high` |
 | < 1 day | `critical` |
 
-#### `mint-age` — weight 10
-| Age | Severity |
-|---|---|
-| ≥ 365 days | `none` |
-| 90–365 days | `low` |
-| 30–90 days | `medium` |
-| 7–30 days | `high` |
-| < 7 days | `critical` |
-
-There is no RPC method returning "when was this account created", so signature
-history is walked backwards. **If the scan limit is hit before reaching the
-start of history, the signal is reported `unavailable`, not young.** The oldest
-signature fetched would otherwise be mistaken for the creation date, branding
-the busiest tokens on Solana as minutes old. A newly created token has a short
-history and resolves exactly — which is precisely the case that matters.
+Pool Age is the only maturity signal. It uses the oldest independently corroborated
+pool creation timestamp. Without that measurement, its 12 points are unavailable
+and excluded from the measurable-weight numerator and category scoring. Total
+possible signal weight remains 152; coverage is measurable weight / 152 × 100.
 
 ---
 
@@ -481,7 +470,7 @@ score:
 ## 6. Worked example
 
 The token that motivated this rework: largest holder 37.29%, holders 2–10
-43.31% (top 10: 80.60%), $12.6K liquidity in one pool, mint 1.2 days old, pool
+43.31% (top 10: 80.60%), $12.6K liquidity in one pool, pool
 4.7 days old, authorities renounced, trading otherwise normal.
 
 | Category | Ratio | Findings |
@@ -490,19 +479,15 @@ The token that motivated this rework: largest holder 37.29%, holders 2–10
 | Holders | 82% | top-1 `critical`, spread `medium` |
 | Liquidity | 65% | depth `high`, ratio `medium`, one pool `medium` |
 | Market Activity | 7% | 24h move `low`, otherwise normal |
-| Maturity | 89% | pool age `high`, mint age `critical` |
+| Maturity | 80% | pool age `high` |
 
 ```
-score = 100 × √((0.00² + 0.82² + 0.65² + 0.07² + 0.89²) / 5) = 62
+score = 100 × √((0.00² + 0.82² + 0.65² + 0.07² + 0.80²) / 5) = 59
 ```
 
-A flat average of the same categories gives 49; the old signal-level average
-gave 41. The difference is entirely the refusal to let two clean dimensions
-cancel three compromised ones.
-
-**62 → High Risk Signals**, versus **41 → Elevated** under the old flat
-average. Rationale: *"Severe maturity risk, holder concentration and liquidity
-risk, partially offset by renounced authorities and normal trading activity."*
+Pool Age alone supplies the maturity ratio. This example now scores
+**59 → Elevated Risk Signals** using the same category weights and classification
+bands; the change comes from removing the second age measurement.
 
 For contrast, the all-red-flags archetype scores **90 → Critical**, and a
 healthy blue chip **0 → Low**.

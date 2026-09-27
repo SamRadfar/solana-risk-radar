@@ -191,13 +191,6 @@ export interface TokenLargestAccount {
   uiAmountString: string;
 }
 
-export interface SignatureInfo {
-  signature: string;
-  slot: number;
-  blockTime: number | null;
-  err: unknown;
-}
-
 export function getAccountInfoParsed<TInfo>(
   address: string,
 ): Promise<RpcContextValue<RpcAccount<ParsedAccountData<TInfo>> | null>> {
@@ -237,11 +230,4 @@ export function getMultipleAccountOwners(
     addresses,
     { encoding: "base64", dataSlice: { offset: 0, length: 0 } },
   ]);
-}
-
-export function getSignaturesForAddress(
-  address: string,
-  options: { limit?: number; before?: string } = {},
-): Promise<SignatureInfo[]> {
-  return rpcCall("getSignaturesForAddress", [address, { limit: 1000, ...options }]);
 }

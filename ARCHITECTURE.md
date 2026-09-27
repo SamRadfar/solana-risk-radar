@@ -34,11 +34,10 @@ GET /api/analyze?address=…                     src/app/api/analyze/route.ts
   ├─ Promise.all:
   │    ├─ getOnChainMetadata()   Metaplex PDA or Token-2022 extension
   │    ├─ getHolderData()        largest accounts → owners → classification
-  │    ├─ getTokenAge()          bounded signature-history scan
   │    └─ getMarketData()        DexScreener
   │
   ├─ buildRiskReport()                         src/lib/risk-engine/engine.ts
-  │    └─ 14 pure rules → signals → category roll-up → score
+  │    └─ 13 pure rules → signals → category roll-up → score
   ▼
 RiskReport (JSON) → rendered by ReportView
 ```
@@ -74,7 +73,6 @@ src/
     │   ├── mint.ts              mint account + Token-2022 extensions
     │   ├── metadata.ts          Metaplex borsh decode / T22 extension
     │   ├── holders.ts           largest accounts → owners → classification
-    │   ├── age.ts               bounded history scan
     │   └── knownAddresses.ts    AMM / burn / custodian labels
     │
     ├── providers/
@@ -84,7 +82,7 @@ src/
     │   ├── types.ts             the contract between data, engine and UI
     │   ├── input.ts             AnalysisInput — everything a rule may read
     │   ├── helpers.ts           severity→points mapping, threshold bands
-    │   ├── rules/*.ts           14 rules, grouped by category
+    │   ├── rules/*.ts           13 rules, grouped by category
     │   └── engine.ts            runs rules, aggregates, classifies
     │
     ├── cache.ts                 in-process TTL cache
