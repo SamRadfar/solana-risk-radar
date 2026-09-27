@@ -72,6 +72,11 @@ export interface ProviderSnapshot {
   available: boolean;
   fetchedAt: number;
   observations: PoolObservation[];
+  /**
+   * Pools fetched by address because ANOTHER provider listed them. They can
+   * corroborate that pool's identity/metrics but never vote on price.
+   */
+  lookups?: PoolObservation[];
   token: TokenReference | null;
   errors: string[];
 }
@@ -79,6 +84,8 @@ export interface ProviderSnapshot {
 export interface ObservationDecision extends PoolObservation {
   accepted: boolean;
   rejection: string | null;
+  /** True for by-address lookup rows: pool corroboration only, no price vote. */
+  lookup?: boolean;
   correlationKey: string;
   /** Each quote dependency contributes at most one unit; USD depth has no vote. */
   weight: number;
@@ -158,12 +165,31 @@ export interface MarketValidation {
   providers: ProviderOpinion[];
   counterReferences: { requestedMints: string[]; observations: TokenReference[]; error: string | null };
   pairs: MarketPair[];
-  poolDecisions: { pairAddress: string; accepted: boolean; reason: string; liquidity: ValidatedMetric; volume24h: ValidatedMetric; buys: ValidatedMetric; sells: ValidatedMetric }[];
+  poolDecisions: { pairAddress: string; accepted: boolean; reason: string; liquidity: ValidatedMetric; volume24h: ValidatedMetric; buys: ValidatedMetric; sells: ValidatedMetric;
+    /** Same-pool 24h return (gross, 1 + %/100) corroborated across providers. */
+    change24h: ValidatedMetric }[];
   historyPool: { pairAddress: string; dexId: string } | null;
   history: PriceHistory | null;
   historyCheck: { status: "consistent" | "conflict" | "unavailable"; reason: string; disagreement: number | null };
+  /** Which corroborated pools each subset metric was measured on. */
+  volumeSubset: SubsetCoverage | null;
+  activitySubset: (SubsetCoverage & { buys: number; sells: number }) | null;
+  change24hSubset: SubsetCoverage | null;
+  /** By-address pool corroboration lookup, when performed. Diagnostics only. */
+  poolLookup?: { requested: number; returned: number; error: string | null };
   circulatingSupply: number | null;
   totalSupplyUi: number | null;
+}
+
+/** A metric measured on a subset of the corroborated pools, with honest coverage. */
+export interface SubsetCoverage {
+  poolsMeasured: number;
+  poolsCorroborated: number;
+  /** Corroborated reserves of the measured pools; the compatible denominator for ratios. */
+  liquidityUsd: number;
+  /** Measured pools' share of all corroborated reserves, 0-1. */
+  liquidityShare: number;
+  excluded: { pairAddress: string; reason: string }[];
 }
 
 /** Raw availability is distinct from market validation; absence never bypasses it. */

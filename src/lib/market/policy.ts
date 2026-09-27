@@ -20,6 +20,15 @@ export const MAX_HISTORY_AGE_MS = 15 * 60_000;
 export const PROVIDER_TIMEOUT_MS = 8_000;
 export const MIN_OBSERVATION_LIQUIDITY_USD = 250;
 export const MAX_QUOTE_REFERENCES = 12;
+/** One bounded by-address lookup so a pool listed by only one provider can be independently corroborated. */
+export const MAX_POOL_LOOKUPS = 30;
+/**
+ * A subset-based market metric (24h volume, trade counts, 24h return) is only
+ * published when the pools that measured it hold a strict majority of the
+ * corroborated reserves: the figure must describe most of the measured market,
+ * not a minority slice. Semantic (majority), not tuned to test tokens.
+ */
+export const MIN_SUBSET_LIQUIDITY_SHARE = 0.5;
 
 /** An address registry is identity evidence, NOT a fixed USD peg assumption. */
 export const TRUSTED_QUOTE_MINTS = new Set([
