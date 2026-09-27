@@ -2,20 +2,25 @@ import type { AnalysisInput } from "../input";
 import type { RiskSignal, Severity } from "../types";
 import { classify, pct, signal, unavailable, usd, type Band } from "../helpers";
 import {
-  pairsByLiquidity,
   validationOf,
   priceChange24h,
-  totalLiquidity,
   totalVolume24h,
 } from "../../market/access";
+import type { SubsetCoverage } from "../../market/types";
 
 const CATEGORY = "Market Activity" as const;
 
 const NO_MARKET_DATA = (error: string | undefined) =>
   `Independently validated market data is unavailable. ${error ?? ""}`.trim();
 
-const NO_POOLS =
-  "No liquidity pool was found for this token, so there is no trading activity to assess.";
+/** Disclose which corroborated pools a subset metric was measured on. */
+function coverageEvidence(c: SubsetCoverage) {
+  return [
+    { label: "Pools measured", value: `${c.poolsMeasured} of ${c.poolsCorroborated} corroborated pools` },
+    { label: "Share of corroborated reserves", value: pct(c.liquidityShare, 1) },
+    ...(c.excluded.length ? [{ label: "Excluded for this metric", value: c.excluded.slice(0, 3).map((e) => `${e.pairAddress.slice(0, 8)}… (${e.reason})`).join("; ") + (c.excluded.length > 3 ? `; +${c.excluded.length - 3} more` : "") }] : []),
+  ];
+}
 
 /**
  * 24-hour volume relative to liquidity (turnover).
@@ -30,31 +35,25 @@ export function tradingActivityRule({ marketData }: AnalysisInput): RiskSignal {
   const METRIC = "24h volume relative to liquidity";
   const MAX_POINTS = 10;
 
-  if (!marketData.available || totalLiquidity(marketData) === null || totalVolume24h(marketData) === null) {
+  const subset = validationOf(marketData).volumeSubset;
+  if (!marketData.available || totalVolume24h(marketData) === null || subset === null) {
     return unavailable({
       id: ID,
       label: LABEL,
       category: CATEGORY,
       metric: METRIC,
       maxPoints: MAX_POINTS,
-      reason: NO_MARKET_DATA(marketData.error),
-    });
-  }
-  if (marketData.pairs.length === 0) {
-    return unavailable({
-      id: ID,
-      label: LABEL,
-      category: CATEGORY,
-      metric: METRIC,
-      maxPoints: MAX_POINTS,
-      reason: NO_POOLS,
+      reason: marketData.available
+        ? `Independently validated 24h volume was unavailable. ${validationOf(marketData).volume24h.reason}.`
+        : NO_MARKET_DATA(marketData.error),
     });
   }
 
-  const liquidity = totalLiquidity(marketData);
+  // Volume and liquidity come from the SAME measured pools, never mixed sets.
+  const liquidity = subset.liquidityUsd;
   const volume = totalVolume24h(marketData);
 
-  if (liquidity === null || volume === null || liquidity <= 0) {
+  if (volume === null || liquidity <= 0) {
     return unavailable({
       id: ID,
       label: LABEL,
@@ -100,11 +99,14 @@ export function tradingActivityRule({ marketData }: AnalysisInput): RiskSignal {
     maxPoints: MAX_POINTS,
     severity,
     observedValue: `${usd(volume)} in 24h (${turnover.toFixed(2)}x liquidity)`,
-    explanation,
+    explanation: subset.poolsMeasured < subset.poolsCorroborated
+      ? `${explanation} Measured on ${subset.poolsMeasured} of ${subset.poolsCorroborated} corroborated pools holding ${pct(subset.liquidityShare, 1)} of their reserves; pools whose providers disagree on volume are excluded from both volume and liquidity.`
+      : explanation,
     evidence: [
       { label: "24h volume", value: usd(volume) },
-      { label: "Total liquidity", value: usd(liquidity) },
+      { label: "Liquidity of the same pools", value: usd(liquidity) },
       { label: "Turnover ratio", value: `${turnover.toFixed(3)}x` },
+      ...coverageEvidence(subset),
     ],
   });
 }
@@ -120,20 +122,22 @@ export function tradeImbalanceRule({ marketData }: AnalysisInput): RiskSignal {
   const MAX_POINTS = 6;
   const MIN_TRADES = 50;
 
-  if (!marketData.available || validationOf(marketData).activity.status !== "validated") {
+  const activity = validationOf(marketData).activity, subset = validationOf(marketData).activitySubset;
+  if (!marketData.available || activity.status !== "validated" || subset === null) {
     return unavailable({
       id: ID,
       label: LABEL,
       category: CATEGORY,
       metric: METRIC,
       maxPoints: MAX_POINTS,
-      reason: marketData.available ? NO_POOLS : NO_MARKET_DATA(marketData.error),
+      reason: marketData.available
+        ? `Independently validated buy/sell activity was unavailable. ${activity.reason}.`
+        : NO_MARKET_DATA(marketData.error),
     });
   }
 
-  // Validated activity proves both counts exist for every projected pool.
-  const buys = pairsByLiquidity(marketData).reduce((sum, pair) => sum + pair.buys24h!, 0);
-  const sells = pairsByLiquidity(marketData).reduce((sum, pair) => sum + pair.sells24h!, 0);
+  // Counts come only from pools whose buys AND sells both validated.
+  const { buys, sells } = subset;
   const total = buys + sells;
 
   // Below a handful of trades the ratio is noise, not signal.
@@ -172,6 +176,7 @@ export function tradeImbalanceRule({ marketData }: AnalysisInput): RiskSignal {
       { label: "24h buys", value: String(buys) },
       { label: "24h sells", value: String(sells) },
       { label: "Sell share", value: pct(sellShare, 1) },
+      ...coverageEvidence(subset),
     ],
   });
 }
@@ -224,7 +229,8 @@ export function priceVolatilityRule({ marketData }: AnalysisInput): RiskSignal {
         : `The price moved ${direction} ${magnitude.toFixed(2)}% over the last 24 hours. Swings of this size mean the position's value can change dramatically within hours, in either direction. Note that a large upward move is scored the same as a downward one: both indicate instability, not a prediction of what comes next.`,
     evidence: [
       { label: "24h change", value: `${change.toFixed(2)}%` },
-      { label: "Measurement", value: "Independent provider 24h return agreement" },
+      { label: "Measurement", value: validationOf(marketData).change24hSubset ? "Depth-weighted same-pool return corroborated across providers" : "Independent provider 24h return agreement" },
+      ...(validationOf(marketData).change24hSubset ? coverageEvidence(validationOf(marketData).change24hSubset!) : []),
     ],
   });
 }

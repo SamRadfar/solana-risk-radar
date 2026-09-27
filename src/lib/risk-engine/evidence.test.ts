@@ -277,7 +277,7 @@ describe("evidence supports the exact claim each signal makes", () => {
       "trading-activity",
     );
     expect(signal.evidence.find((e) => e.label === "24h volume")?.value).toBe("$50.00K");
-    expect(signal.evidence.find((e) => e.label === "Total liquidity")?.value).toBe("$100.00K");
+    expect(signal.evidence.find((e) => e.label === "Liquidity of the same pools")?.value).toBe("$100.00K");
     expect(signal.evidence.find((e) => e.label === "Turnover ratio")?.value).toBe("0.500x");
   });
 

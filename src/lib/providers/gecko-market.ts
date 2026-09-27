@@ -59,6 +59,16 @@ export async function getGeckoSnapshot(mint: string): Promise<ProviderSnapshot> 
   return { provider: "geckoterminal", mint, fetchedAt: Math.max(tokenResult.fetchedAt, poolsResult.fetchedAt),
     available: validToken !== null || Array.isArray(object(poolsResult.body).data), token: validToken, observations, errors };
 }
+/**
+ * GeckoTerminal's view of specific pools, fetched by address because another
+ * provider listed them. Used only to corroborate those pools, never as a price vote.
+ */
+export async function getGeckoPoolsByAddress(mint: string, addresses: string[]): Promise<{ observations: PoolObservation[]; error: string | null }> {
+  if (!addresses.length) return { observations: [], error: null };
+  const result = await marketJson(GECKO_ENDPOINT + "/pools/multi/" + addresses.map(encodeURIComponent).join(",") + "?include=base_token,quote_token");
+  const observations = normalizeGeckoPools(result.body, mint, result.fetchedAt).filter(o => o.pairAddress !== null && addresses.includes(o.pairAddress));
+  return { observations, error: result.error ?? (!Array.isArray(object(result.body).data) ? "Malformed pool lookup response" : result.events.join("; ") || null) };
+}
 /** Bounded batch; counter prices are contradiction checks, not extra provider votes. */
 export async function getGeckoReferences(mints: string[]): Promise<{ references: TokenReference[]; error: string | null }> {
   if (!mints.length) return { references: [], error: null };

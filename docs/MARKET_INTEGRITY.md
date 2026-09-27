@@ -1,6 +1,6 @@
 # Market integrity v2
 
-Algorithm/schema: `market-integrity-v2.5`. This layer changes measurement eligibility,
+Algorithm/schema: `market-integrity-v2.6`. This layer changes measurement eligibility,
 not risk bands, category weights, holder classification or authority rules.
 Public market-data providers can be wrong, including in correlated ways. Agreement
 is corroboration, not a guarantee of executable prices or independent upstream ownership.
@@ -91,7 +91,12 @@ validated price × on-chain total UI supply. FDV never substitutes for market ca
 
 24h change is separately compared as gross return (1 + percent/100), with 5%
 multiplicative tolerance. Conflicting base-token returns or unavailable quote-side
-returns remain withheld. Huge independently agreeing returns are permitted, not
+returns remain withheld. If the provider-level comparison cannot validate (for
+example one thin pool with a stale prior price makes a provider's own pools
+disagree), a fallback uses SAME-POOL returns corroborated across providers (same
+5% tolerance), takes their depth-weighted median, and publishes it only when the
+pools agreeing with it hold a strict majority of corroborated reserves. Outlying
+pools are disclosed. Providers disagreeing on the same pool never validate. Huge independently agreeing returns are permitted, not
 clamped. UI and the volatility rule consume precisely this same measurement.
 The four-hour chart does not validate a 24-hour return.
 
@@ -100,6 +105,27 @@ across providers, rather than summing overlapping provider totals. Reserves have
 25% tolerance; volume and buy/sell counts have 35%. Only matched corroborated
 pools contribute, once. The published figure is a corroborated indexed subset,
 not complete TVL or all trading volume. Missing fields never become measured zero.
+
+**Metric-specific subsets (no all-or-nothing).** Each metric uses only the
+corroborated pools with adequate evidence for THAT metric. A pool whose providers
+disagree on (or lack) volume or trade counts is excluded from that metric only;
+its reserves, identity, age and other metrics are unaffected. Volume and trade
+counts are published only when the measured pools hold a strict majority of
+corroborated reserves (a semantic majority, not tuned to test tokens), with
+pools measured, reserve share and exclusions disclosed. Turnover divides the
+subset's volume by the SAME subset's reserves, never a mixed set. Buy/sell balance
+uses only pools where buys AND sells both validated. Pool Age needs corroborated
+identity plus both providers' creation timestamps, not activity or returns.
+Liquidity vs market cap stays unavailable when circulation cannot be corroborated.
+
+**Pool-identity lookup.** Providers can list disjoint pool subsets for the same
+token (USDC on 2026-09-27: zero overlap; GeckoTerminal's list was fake-token pools
+reporting $4–9B reserves). When price validates but no pool is corroborated,
+up to 30 DexScreener-listed pools are looked up on GeckoTerminal by address
+(one request; skipped otherwise because GeckoTerminal rate-limits tightly).
+Lookup rows pass every observation admission check, must agree with that
+provider's own price consensus, and never vote on price, clusters, returns or
+circulation. A pool listed by only one provider is still never counted.
 These looser activity tolerances acknowledge asynchronous rolling windows; they
 are policy allowances, not statistically calibrated accuracy guarantees.
 Per-pool decisions preserve exclusions and each metric's status/source values.
@@ -165,7 +191,9 @@ them to any particular token's desired result.
 ## Failure behavior, request budget and limits
 
 DS, GT token and GT pools start concurrently. Then one bounded counter-token batch
-(maximum 12 sorted distinct mints) is fetched; then at most one history request.
+(maximum 12 sorted distinct mints) is fetched; then, only when no pool could be
+corroborated, one GT by-address pool lookup (maximum 30 pools); then at most one
+history request.
 Each request times out after eight seconds. An outage lowers coverage; it cannot
 elevate another provider's credibility. No paid service, secret or environment
 change is needed. Rate limits on shared public IPs can still reduce availability.

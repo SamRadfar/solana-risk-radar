@@ -49,7 +49,7 @@ describe("Signal 14 — Rug / Security Risk (RugCheck)", () => {
     expect(report.totalWeight).toBe(152);
     expect(buildRiskReport(makeInput({ rugCheck: liveResult("creatorHistoryAndLp") }), context).totalWeight).toBe(158);
     expect(EXTERNAL_SIGNAL_IDS.has("rug-security")).toBe(true);
-    expect(MARKET_ALGORITHM_VERSION).toBe("market-integrity-v2.5");
+    expect(MARKET_ALGORITHM_VERSION).toBe("market-integrity-v2.6");
   });
 
   it("clean report (live SOL/USDC shape): visible, context only, weight 0, provider score shown as context only", () => {
