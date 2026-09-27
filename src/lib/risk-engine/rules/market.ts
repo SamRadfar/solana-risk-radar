@@ -3,14 +3,16 @@ import type { RiskSignal, Severity } from "../types";
 import { classify, pct, signal, unavailable, usd, type Band } from "../helpers";
 import {
   pairsByLiquidity,
+  validationOf,
+  priceChange24h,
   totalLiquidity,
   totalVolume24h,
-} from "../../providers/dexscreener";
+} from "../../market/access";
 
 const CATEGORY = "Market Activity" as const;
 
 const NO_MARKET_DATA = (error: string | undefined) =>
-  `Market data could not be retrieved from DexScreener. ${error ?? ""}`.trim();
+  `Independently validated market data is unavailable. ${error ?? ""}`.trim();
 
 const NO_POOLS =
   "No liquidity pool was found for this token, so there is no trading activity to assess.";
@@ -28,7 +30,7 @@ export function tradingActivityRule({ marketData }: AnalysisInput): RiskSignal {
   const METRIC = "24h volume relative to liquidity";
   const MAX_POINTS = 10;
 
-  if (!marketData.available) {
+  if (!marketData.available || totalLiquidity(marketData) === null || totalVolume24h(marketData) === null) {
     return unavailable({
       id: ID,
       label: LABEL,
@@ -52,7 +54,7 @@ export function tradingActivityRule({ marketData }: AnalysisInput): RiskSignal {
   const liquidity = totalLiquidity(marketData);
   const volume = totalVolume24h(marketData);
 
-  if (liquidity <= 0) {
+  if (liquidity === null || volume === null || liquidity <= 0) {
     return unavailable({
       id: ID,
       label: LABEL,
@@ -60,7 +62,7 @@ export function tradingActivityRule({ marketData }: AnalysisInput): RiskSignal {
       metric: METRIC,
       maxPoints: MAX_POINTS,
       reason: "Turnover cannot be computed because reported liquidity is zero.",
-      evidence: [{ label: "24h volume", value: usd(volume) }],
+      evidence: [{ label: "24h volume", value: usd(volume ?? 0) }],
     });
   }
 
@@ -118,7 +120,7 @@ export function tradeImbalanceRule({ marketData }: AnalysisInput): RiskSignal {
   const MAX_POINTS = 6;
   const MIN_TRADES = 50;
 
-  if (!marketData.available || marketData.pairs.length === 0) {
+  if (!marketData.available || validationOf(marketData).activity.status !== "validated") {
     return unavailable({
       id: ID,
       label: LABEL,
@@ -129,8 +131,9 @@ export function tradeImbalanceRule({ marketData }: AnalysisInput): RiskSignal {
     });
   }
 
-  const buys = marketData.pairs.reduce((sum, pair) => sum + pair.buys24h, 0);
-  const sells = marketData.pairs.reduce((sum, pair) => sum + pair.sells24h, 0);
+  // Validated activity proves both counts exist for every projected pool.
+  const buys = pairsByLiquidity(marketData).reduce((sum, pair) => sum + pair.buys24h!, 0);
+  const sells = pairsByLiquidity(marketData).reduce((sum, pair) => sum + pair.sells24h!, 0);
   const total = buys + sells;
 
   // Below a handful of trades the ratio is noise, not signal.
@@ -188,11 +191,9 @@ export function priceVolatilityRule({ marketData }: AnalysisInput): RiskSignal {
   const METRIC = "Absolute price change over 24 hours";
   const MAX_POINTS = 6;
 
-  const deepest = marketData.available
-    ? pairsByLiquidity(marketData).find((pair) => pair.priceChange24h !== null)
-    : undefined;
+  const change = priceChange24h(marketData);
 
-  if (!deepest || deepest.priceChange24h === null) {
+  if (change === null) {
     return unavailable({
       id: ID,
       label: LABEL,
@@ -200,12 +201,11 @@ export function priceVolatilityRule({ marketData }: AnalysisInput): RiskSignal {
       metric: METRIC,
       maxPoints: MAX_POINTS,
       reason: marketData.available
-        ? "No 24-hour price change is reported for any pool in which this token is the base asset."
+        ? validationOf(marketData).change24h.reason
         : NO_MARKET_DATA(marketData.error),
     });
   }
 
-  const change = deepest.priceChange24h;
   const magnitude = Math.abs(change);
   const severity = classify(magnitude, VOLATILITY_BANDS);
   const direction = change >= 0 ? "up" : "down";
@@ -224,10 +224,7 @@ export function priceVolatilityRule({ marketData }: AnalysisInput): RiskSignal {
         : `The price moved ${direction} ${magnitude.toFixed(2)}% over the last 24 hours. Swings of this size mean the position's value can change dramatically within hours, in either direction. Note that a large upward move is scored the same as a downward one: both indicate instability, not a prediction of what comes next.`,
     evidence: [
       { label: "24h change", value: `${change.toFixed(2)}%` },
-      { label: "Measured on", value: `${deepest.dexId} (deepest pool)` },
-      ...(deepest.priceUsd !== null
-        ? [{ label: "Current price", value: `$${deepest.priceUsd.toPrecision(6)}` }]
-        : []),
+      { label: "Measurement", value: "Independent provider 24h return agreement" },
     ],
   });
 }

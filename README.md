@@ -108,7 +108,7 @@ Full detail: [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`METHODOLOGY.md`](METHODOL
 | **Market activity** | Volume vs liquidity, buy/sell balance, 24h price movement |
 | **Maturity** | Pool age and token age, with age reported as unmeasured where it cannot be resolved |
 | **Evidence provenance** | Every signal carries well-formed, absolute-https evidence matching the exact claim it makes |
-| **Multi-provider resolution** | Liquidity-weighted median price across every indexed Solana pool, not the biggest one |
+| **Multi-provider resolution** | Separate provider opinions, independent agreement, explicit conflict/unverified states |
 | **Coverage & confidence** | Both reported on the face of the report, never implied |
 | **Unknown / Not Measured** | A first-class outcome, rendered as such — never as a zero |
 
@@ -123,7 +123,7 @@ The full derivation, every threshold and the calibration data are in
 [`METHODOLOGY.md`](METHODOLOGY.md). The principles that shape it:
 
 **Canonical token identity.** The mint account is read first and everything else is verified
-against it. Chart data is only plotted once the provider's base token address matches the mint.
+against it. Market and history observations prove whether the requested mint is base or quote.
 
 **Holders are classified, not just counted.** `getTokenLargestAccounts` returns token
 *accounts*, not people. A pool vault holding 40% of supply is liquidity, and a burn address
@@ -171,44 +171,20 @@ and *is there a bloc behind them?* The familiar top-10 figure is still shown.
 
 <br>
 
-A token's price, market cap and liquidity all come from third-party pool data, which is
-adversarially manipulable: anyone can create a pool and quote any price in it. Risk Radar
-therefore never trusts a single pool.
+Pool observations are not independent providers. DexScreener and GeckoTerminal each
+produce an identity-checked, orientation-safe opinion; only independent agreement
+can establish a canonical price. Shared quote dependencies are grouped and USD
+liquidity never votes for its own valuation. Unresolved clusters remain conflicts.
 
-**Consensus, not the biggest pool.** Every Solana pool the provider returns becomes an
-observation, weighted by `sqrt(liquidity) × activity × quote quality × freshness`. The canonical
-price is the **liquidity-weighted median** of those observations — a median, so it survives a
-minority of corrupted inputs.
+Price, circulating supply, 24h change and corroborated pool metrics each have a
+validation state. Single-source, conflicting and unavailable values are withheld
+from canonical display and price-dependent risk rules. FDV requires validated
+price and on-chain supply. Market cap additionally requires corroborated supply
+provenance. No unavailable measurement is counted as clean.
 
-**Explicit outlier rejection.** Observations more than 30% from the provisional consensus are
-rejected as describing a different asset or a broken market. Real cross-venue spread on Solana
-is well under a percent, so this is loose enough never to reject an honest market and tight
-enough to catch the failures that matter, which are multiplicative. Rejection needs at least
-three observations — with one or two there is no crowd to disagree with, and the confidence says
-so instead.
-
-**No single pool can dominate.** Square-rooting depth slows a large pool's influence but does
-not bound it. One real Meteora pool quoted BONK at roughly 5,000× the true price with 121× the
-depth of any honest market, and even square-rooted it out-weighed all nine legitimate pools
-combined. So no observation may carry more than 90% of the weight of all the others put
-together. This case is pinned by a regression test written against *behaviour*, not against a
-hard-coded price.
-
-**Confidence is reported, not implied.**
-
-| Confidence | Conditions |
-|---|---|
-| **High** | ≥3 accepted pools, ≤2% dispersion, ≥80% of liquidity accepted, ≥1 strong quote asset |
-| **Medium** | ≥2 accepted pools, ≤8% dispersion, ≥50% of liquidity accepted |
-| **Low** | Anything measurable below that |
-| **None** | No pool survived acceptance — nothing is reported |
-
-**Market Cap and FDV are mathematically distinct.** FDV is always
-`consensus price × on-chain total supply` — both terms verified, so it is computed rather than
-taken on trust. Market cap uses the provider's implied circulating supply, and is **withheld
-entirely** if that implies more circulating supply than actually exists (beyond a 2% snapshot
-tolerance). This is why USDC shows no market cap: the provider's figure is multi-chain, and a
-Solana-only analysis cannot honestly print it.
+See [Market integrity architecture](docs/MARKET_INTEGRITY.md) for thresholds,
+provenance, empirical tolerance observations, request limits and limitations.
+Public providers can still agree incorrectly; agreement is not a guarantee.
 
 </details>
 
@@ -217,14 +193,11 @@ Solana-only analysis cannot honestly print it.
 
 <br>
 
-The report hero carries a four-hour price chart, drawn from GeckoTerminal OHLCV for the *same
-pool* the consensus accepted as canonical — the response's base token address is verified
-against the mint before a single point is plotted.
-
-It is **explicitly not part of the risk score**, and the caption under it says so. Four hours of
-price action is context for reading the report, not evidence of structural risk, and scoring it
-would reward tokens simply for being up this afternoon. Fewer than six usable points and the
-chart withholds rather than drawing a misleading line.
+GeckoTerminal history is requested in USD for the exact mint, including quote-side
+mints, and checked on the server before scoring. A fresh close that contradicts
+spot invalidates the market valuation and appears in diagnostics. The four-hour
+return itself is not scored. Fewer than six usable points prevents chart rendering;
+unavailable history is never presented as confirmation.
 
 </details>
 

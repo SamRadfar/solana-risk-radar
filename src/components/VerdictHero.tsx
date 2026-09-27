@@ -224,14 +224,21 @@ export default function VerdictHero({ report }: { report: RiskReport }) {
           <MarketContextChart report={report} />
         </div>
 
+        <p className="mt-5 text-xs" style={{ color: "var(--ink-secondary)" }} data-market-status={report.market.status}>
+          {{ validated: `Validated · ${report.market.confidence} confidence`,
+            single_source: "Single source · Unverified indicative quote; excluded from risk scoring.",
+            conflict: "Market data conflict — price and valuations withheld.",
+            unavailable: "Market data unavailable — price and valuations withheld." }[report.market.status]}
+        </p>
+
         {/* Token facts */}
         <div
           className="mt-6 pt-5 grid grid-cols-2 sm:grid-cols-4 gap-4"
           style={{ borderTop: "1px solid var(--line)" }}
         >
           <Stat
-            label="Price"
-            value={overview.priceUsd !== null ? formatPrice(overview.priceUsd) : "—"}
+            label={report.market.contextualQuote ? "Indicative · unverified" : "Price"}
+            value={overview.priceUsd !== null ? formatPrice(overview.priceUsd) : report.market.contextualQuote ? formatPrice(report.market.contextualQuote.priceUsd) : "—"}
           />
           <Stat
             label="Market cap"

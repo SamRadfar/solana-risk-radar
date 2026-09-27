@@ -344,7 +344,7 @@ each) is ordinary for a widely held token; nine sharing 65% is a bloc.
 | $50k–$250k | `medium` |
 | $10k–$50k | `high` |
 | < $10k | `critical` |
-| No pools found | `critical` |
+| No independently corroborated pools | `unavailable` (not proof of zero liquidity) |
 
 #### `liquidity-ratio` — weight 10
 Liquidity as a share of market capitalisation.
@@ -410,7 +410,7 @@ ratio is noise and the signal is `unavailable` rather than misleading.
 | > 85% | `high` |
 
 #### `price-volatility` — weight 6
-Absolute 24h price movement, measured on the deepest pool.
+Absolute 24h price movement from the independently validated return shared with the UI.
 
 | Movement | Severity |
 |---|---|
@@ -526,3 +526,8 @@ Deliberately out of scope; no score should be read as covering it:
 
 A token can pass every check here and still go to zero. The score describes
 what was measured, and nothing else.
+
+
+## Market measurement eligibility (v2)
+
+Before any market rule runs, provider observations pass the [market integrity layer](docs/MARKET_INTEGRITY.md). Canonical prices require independent provider agreement. Correlated pool counts and USD liquidity cannot establish that agreement. Unverified/conflicting measurements are excluded from scoring; the severity bands and category weights above are unchanged. Liquidity/activity values refer to a corroborated indexed pool subset, not guaranteed complete market coverage. Historical calibration values above describe their original snapshots, not current validation availability.

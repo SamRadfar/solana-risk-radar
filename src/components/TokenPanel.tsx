@@ -44,21 +44,8 @@ export default function TokenPanel({ report }: { report: RiskReport }) {
   const websites = overview.websites.slice(0, 2);
   const socials = overview.socials.slice(0, 5);
 
-  /*
-   * FDV is suppressed when it comes back below the market cap, which is
-   * definitionally impossible — fully diluted value includes the circulating
-   * part. The aggregator does report this: for USDC every indexed pool says
-   * market cap $60.9B and FDV $9.3B at the same time. The figure is wrong
-   * rather than merely surprising, so it is withheld instead of printed.
-   *
-   * Applied here, at the point of display, rather than in the market provider:
-   * this is a decision about what is fit to show, not a change to how the
-   * pipeline aggregates.
-   */
-  const fdvIsCoherent =
-    market.fullyDilutedUsd !== null &&
-    (market.marketCapUsd === null || market.fullyDilutedUsd >= market.marketCapUsd);
-  const fullyDiluted = fdvIsCoherent ? market.fullyDilutedUsd : null;
+  const fullyDiluted = market.fullyDilutedUsd;
+  const statusLabels = { validated: "Validated price", single_source: "Single-source · unverified", conflict: "Market data conflict", unavailable: "Market data unavailable" };
 
   return (
     <>
@@ -90,25 +77,34 @@ export default function TokenPanel({ report }: { report: RiskReport }) {
           <span className="eyebrow">Market</span>
         </div>
 
+        <p role="status" className={styles.unavailable}>
+          {statusLabels[market.status]}{market.status === "validated" ? " · " + market.confidence + " confidence" : ""}
+        </p>
+        {market.contextualQuote && <p className={styles.unavailable} data-contextual-quote
+          title={`${market.contextualQuote.provider} · Fetched ${new Date(market.contextualQuote.fetchedAt).toISOString()} · Excluded from risk scoring`}>
+          Indicative quote {formatPrice(market.contextualQuote.priceUsd)} · Unverified
+        </p>}
         <dl className={styles.pairs}>
           <Cell label="Price" value={market.priceUsd !== null ? formatPrice(market.priceUsd) : null} />
-          <Cell label="24h" value={formatChange(market.priceChange24hPercent)} />
+          <Cell label="24h" reason={report.diagnostics.change24h.reason} value={formatChange(market.priceChange24hPercent) ?? market.changeState.replace("_", " ")} />
 
           <Cell
             label="Market cap"
-            value={market.marketCapUsd !== null ? formatUsd(market.marketCapUsd) : null}
+            reason={report.diagnostics.marketCap.reason}
+            value={market.marketCapUsd !== null ? formatUsd(market.marketCapUsd) : market.capState === "unavailable" ? "Unavailable" : "Unverified"}
           />
           <Cell
             label="FDV"
-            value={fullyDiluted !== null ? formatUsd(fullyDiluted) : null}
+            reason={report.diagnostics.fdv.reason}
+            value={fullyDiluted !== null ? formatUsd(fullyDiluted) : market.fdvState.replace("_", " ")}
           />
 
           <Cell
-            label="Liquidity"
+            label="Corroborated liquidity"
             value={market.liquidityUsd !== null ? formatUsd(market.liquidityUsd) : null}
           />
           <Cell
-            label="24h volume"
+            label="Corroborated 24h volume"
             value={market.volume24hUsd !== null ? formatUsd(market.volume24hUsd) : null}
           />
 
@@ -120,7 +116,7 @@ export default function TokenPanel({ report }: { report: RiskReport }) {
                 : "0 (reported)"
             }
           />
-          <Cell label="Pools" value={market.available ? String(market.poolCount) : null} />
+          <Cell label="Corroborated pools" value={market.liquidityUsd !== null ? String(market.poolCount) : null} />
         </dl>
       </section>
 
@@ -242,11 +238,11 @@ const METADATA_SOURCE: Record<string, string> = {
   none: "No metadata account",
 };
 
-function Cell({ label, value }: { label: string; value: string | null }) {
+function Cell({ label, value, reason }: { label: string; value: string | null; reason?: string }) {
   return (
     <div className={styles.cell}>
       <dt className={styles.cellLabel}>{label}</dt>
-      <dd className={`tnum ${styles.cellValue}`}>
+      <dd className={`tnum ${styles.cellValue}`} title={reason}>
         {value ?? <span className={styles.unavailable}>Unavailable</span>}
       </dd>
     </div>

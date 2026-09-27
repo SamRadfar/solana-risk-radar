@@ -246,15 +246,15 @@ describe("holder rules", () => {
 });
 
 describe("liquidity rules", () => {
-  it("treats a token with no pools as critical", () => {
+  it("treats missing independently measured pools as unavailable", () => {
     const signal = signalById(
       makeInput({
         marketData: { ...makeInput().marketData, pairs: [] },
       }),
       "liquidity-depth",
     );
-    expect(signal.severity).toBe("critical");
-    expect(signal.observedValue).toBe("No DEX pools found");
+    expect(signal.status).toBe("unavailable");
+    expect(signal.points).toBe(0);
   });
 
   it("caps the liquidity-ratio severity when absolute depth is ample", () => {

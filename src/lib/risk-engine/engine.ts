@@ -1,4 +1,4 @@
-import { marketConsensus } from "../providers/dexscreener";
+import { validationOf, spotPrice, marketCap, contextualQuote } from "../market/access";
 
 import {
   canonicalPair,
@@ -6,10 +6,9 @@ import {
   priceChange24h,
   totalLiquidity,
   totalVolume24h,
-} from "../providers/dexscreener";
+} from "../market/access";
 
 import type { AnalysisInput, RiskRule } from "./input";
-import type { MarketDiagnostics } from "./types";
 import {
   RISK_CATEGORIES,
   type CategoryScore,
@@ -386,7 +385,7 @@ export function buildRiskReport(
   const { holderData } = input;
 
   return {
-    overview,
+    overview: { ...overview, priceUsd: spotPrice(input.marketData), marketCapUsd: marketCap(input.marketData) },
     signals,
     summary: buildSummary(signals, categories),
     distribution: {
@@ -426,10 +425,20 @@ export function buildRiskReport(
      * is recomputed here, and nothing here is an input to the score.
      */
     market: {
+      status: validationOf(input.marketData).status,
+      confidence: validationOf(input.marketData).confidence,
+      contextualQuote: contextualQuote(input.marketData),
+      reason: validationOf(input.marketData).price.reason,
+      changeState: validationOf(input.marketData).change24h.status,
+      capState: validationOf(input.marketData).marketCap.status,
+      fdvState: validationOf(input.marketData).fdv.status,
+      history: validationOf(input.marketData).history,
+      historyStatus: validationOf(input.marketData).historyCheck.status,
+      historyReason: validationOf(input.marketData).historyCheck.reason,
       available: input.marketData.available,
-      priceUsd: overview.priceUsd,
+      priceUsd: spotPrice(input.marketData),
       priceChange24hPercent: priceChange24h(input.marketData),
-      marketCapUsd: overview.marketCapUsd,
+      marketCapUsd: marketCap(input.marketData),
       fullyDilutedUsd: input.mintInfo.supplyIsMeaningful
         ? fullyDilutedValuation(input.marketData, input.mintInfo.supplyUi)
         : null,
@@ -446,60 +455,9 @@ export function buildRiskReport(
      * verdict.
      */
     liquiditySafety: input.liquiditySafety,
-    diagnostics: buildDiagnostics(input, overview),
+    diagnostics: validationOf(input.marketData),
     generatedAt: new Date().toISOString(),
     elapsedMs,
     warnings,
-  };
-}
-
-/**
- * The provenance record for a report's market figures.
- *
- * Built from the same consensus object every displayed figure came from, so
- * the two can never drift apart: if the report shows a price, this says which
- * pools voted for it, which were rejected and why.
- */
-function buildDiagnostics(
-  input: AnalysisInput,
-  overview: TokenOverview,
-): MarketDiagnostics {
-  const consensus = marketConsensus(input.marketData);
-  const supplyUi = input.mintInfo.supplyIsMeaningful ? input.mintInfo.supplyUi : 0;
-
-  return {
-    method: consensus.method,
-    confidence: consensus.confidence,
-    consideredPools: consensus.consideredCount,
-    acceptedPools: consensus.acceptedCount,
-    rejectedPools: consensus.rejectedCount,
-    dispersion: consensus.dispersion,
-    liquidityShare: consensus.liquidityShare,
-    canonicalPriceUsd: consensus.priceUsd,
-    marketCapInputs:
-      overview.marketCapUsd !== null &&
-      consensus.priceUsd !== null &&
-      consensus.impliedCirculating !== null
-        ? { priceUsd: consensus.priceUsd, circulatingSupply: consensus.impliedCirculating }
-        : null,
-    fullyDilutedInputs:
-      consensus.priceUsd !== null && supplyUi > 0
-        ? { priceUsd: consensus.priceUsd, totalSupply: supplyUi }
-        : null,
-    supplySource: "mint account (on chain)",
-    totalSupplyUi: supplyUi,
-    historyPool: consensus.canonicalPool?.pairAddress ?? null,
-    pools: consensus.observations.map((observation) => ({
-      dexId: observation.dexId,
-      pairAddress: observation.pairAddress,
-      quoteSymbol: observation.quoteSymbol,
-      priceUsd: observation.priceUsd,
-      liquidityUsd: observation.liquidityUsd,
-      volume24hUsd: observation.volume24hUsd,
-      weight: observation.weight,
-      accepted: observation.accepted,
-      ...(observation.rejection ? { rejection: observation.rejection } : {}),
-      ...(observation.deviation !== undefined ? { deviation: observation.deviation } : {}),
-    })),
   };
 }

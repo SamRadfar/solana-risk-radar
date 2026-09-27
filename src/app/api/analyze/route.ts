@@ -11,13 +11,15 @@ import { getHolderData } from "@/lib/solana/holders";
 import { getTokenAge } from "@/lib/solana/age";
 import { hasPrivateEndpoint } from "@/lib/solana/rpc";
 import {
-  getMarketData,
   marketCap,
   marketIdentity,
   pairsByLiquidity,
   spotPrice,
   totalLiquidity,
-} from "@/lib/providers/dexscreener";
+  marketEvidenceFresh,
+} from "@/lib/market/access";
+import { getMarketData } from "@/lib/market/service";
+import { reportCacheKey, MARKET_ALGORITHM_VERSION } from "@/lib/market/policy";
 import { getLiquiditySafety } from "@/lib/solana/lpCustody";
 import { buildRiskReport } from "@/lib/risk-engine/engine";
 import { getCached, setCached } from "@/lib/cache";
@@ -50,10 +52,10 @@ export async function GET(request: NextRequest) {
   // A repeat lookup within the TTL is served from memory. Holder scanning is
   // slow on public RPC, so this makes re-inspecting a token feel instant and
   // avoids hammering a free endpoint.
-  const cached = getCached<RiskReport>(mintAddress);
-  if (cached) {
+  const cached = getCached<RiskReport>(reportCacheKey(mintAddress));
+  if (cached && marketEvidenceFresh(cached.diagnostics, Date.now())) {
     return NextResponse.json(cached, {
-      headers: { "Cache-Control": "private, max-age=15", "X-Cache": "hit" },
+      headers: { "Cache-Control": "private, no-store", "X-Cache": "hit", "X-Market-Version": MARKET_ALGORITHM_VERSION },
     });
   }
 
@@ -79,21 +81,8 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  /*
-   * The market is fetched first and on its own, because it is the one lookup
-   * another depends on: LP custody can only be read once the pools to inspect
-   * are known, and those come from the consensus — the same accepted markets
-   * every other figure is drawn from, so a pool the consensus rejected can
-   * never contribute a lock percentage.
-   *
-   * It is a single HTTP call to one aggregator and returns in well under a
-   * second, so paying for it separately costs far less than what it buys:
-   * the LP read then joins the concurrent batch below and overlaps with the
-   * holder scan instead of running after it. Sequencing the two cost ~11s of
-   * added latency on a token with readable pools; overlapping them costs
-   * close to none.
-   */
-  const marketData = await getMarketData(mintAddress);
+  // Independent market providers reconcile before price-dependent LP reads.
+  const marketData = await getMarketData(mintAddress, mintInfo.supplyIsMeaningful ? mintInfo.supplyUi : null);
 
   // Independent lookups run concurrently. Each already degrades to an
   // "unavailable" result internally, so one slow provider cannot fail the
@@ -167,13 +156,10 @@ export async function GET(request: NextRequest) {
           : `Read from ${metadata.source === "metaplex" ? "the Metaplex metadata account" : "the Token-2022 metadata extension"}`,
       ok: metadata.source !== "none",
     },
-    {
-      name: "DexScreener",
-      detail: marketData.available
-        ? `${marketData.pairs.length} pool${marketData.pairs.length === 1 ? "" : "s"} indexed`
-        : (marketData.error ?? "Unavailable"),
-      ok: marketData.available,
-    },
+    ...(marketData.validation?.providers ?? []).map(p => ({
+      name: p.provider, detail: p.status + ": " + (p.priceUsd === null ? p.errors.join("; ") || "No reconciled price" : String(p.priceUsd)),
+      ok: p.status === "usable",
+    })),
     {
       name: "Mint history",
       detail: tokenAge.available
@@ -196,9 +182,9 @@ export async function GET(request: NextRequest) {
     { overview, sources, elapsedMs: Date.now() - started },
   );
 
-  setCached(mintAddress, report);
+  setCached(reportCacheKey(mintAddress), report);
 
   return NextResponse.json(report, {
-    headers: { "Cache-Control": "private, max-age=15", "X-Cache": "miss" },
+    headers: { "Cache-Control": "private, no-store", "X-Cache": "miss", "X-Market-Version": MARKET_ALGORITHM_VERSION },
   });
 }

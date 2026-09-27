@@ -1,3 +1,5 @@
+import { validateMarket } from "../market/validation";
+import type { ProviderSnapshot } from "../market/types";
 import type { AnalysisInput } from "./input";
 
 /**
@@ -73,7 +75,7 @@ export function unmeasuredLiquiditySafety(): AnalysisInput["liquiditySafety"] {
 }
 
 export function makeInput(overrides: Partial<AnalysisInput> = {}): AnalysisInput {
-  return {
+  const input: AnalysisInput = {
     mint: "So11111111111111111111111111111111111111112",
     liquiditySafety: unmeasuredLiquiditySafety(),
     mintInfo: {
@@ -140,6 +142,25 @@ export function makeInput(overrides: Partial<AnalysisInput> = {}): AnalysisInput
     },
     ...overrides,
   };
+  const now = Date.now();
+  const snapshots: ProviderSnapshot[] = ["fixture-a", "fixture-b"].map(provider => ({
+    provider, mint: input.mint, available: input.marketData.available, fetchedAt: now,
+    // A dead-volume scoring fixture still assumes an independently quoted spot.
+    // Zero-volume pools alone can no longer establish that assumption.
+    token: input.marketData.pairs.length > 0 && input.marketData.pairs.every(p => p.volume24hUsd === 0) && input.marketData.pairs[0].priceUsd !== null
+      ? { provider, mint: input.mint, priceUsd: input.marketData.pairs[0].priceUsd!, marketCap: null, fetchedAt: now, sourceUrl: "https://fixture.invalid/spot" } : null,
+    errors: [],
+    observations: input.marketData.pairs.map(p => ({
+      ...p, provider, requestedMint: input.mint, chain: "solana",
+      baseAddress: input.mint, baseSymbol: "TEST", quoteAddress: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      side: "base" as const, counterMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", trustedCounterMint: true,
+      priceNative: null, requestedNativeRatio: null, reportedPriceUsd: p.priceUsd, reportedChange24h: p.priceChange24h,
+      fetchedAt: now, providerUpdatedAt: null, sourceUrl: "https://fixture.invalid", identityError: null,
+    })),
+  }));
+  // Test-only independent observations preserve the established scoring cases.
+  input.marketData = { ...input.marketData, validation: validateMarket(input.mint, snapshots, [], now, input.mintInfo.supplyIsMeaningful ? input.mintInfo.supplyUi : null) };
+  return input;
 }
 
 /**
