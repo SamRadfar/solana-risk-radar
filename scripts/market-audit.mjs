@@ -63,7 +63,7 @@ for (const [name,mint] of TOKENS) {
       const report=await response.json(); d=report.diagnostics; market=report.market; signals=report.signals;
       check(report.overview.mint===mint,"requested mint identity");
     }
-    check(d.version==="market-integrity-v2.5","expected algorithm version");
+    check(d.version==="market-integrity-v2.6","expected algorithm version");
     if (!d.price || !Array.isArray(d.providers)) throw Error("Old/malformed validation diagnostics");
     console.log("\n"+name+" "+d.status+" price="+(market.priceUsd??"WITHHELD")+" confidence="+d.confidence);
     console.log("  cap="+d.marketCap.status+" fdv="+d.fdv.status+" 24h="+d.change24h.status+" disagreement="+d.price.disagreement);

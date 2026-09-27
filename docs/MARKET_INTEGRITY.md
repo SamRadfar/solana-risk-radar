@@ -1,6 +1,6 @@
 # Market integrity v2
 
-Algorithm/schema: `market-integrity-v2.5`. This layer changes measurement eligibility,
+Algorithm/schema: `market-integrity-v2.6`. This layer changes measurement eligibility,
 not risk bands, category weights, holder classification or authority rules.
 Public market-data providers can be wrong, including in correlated ways. Agreement
 is corroboration, not a guarantee of executable prices or independent upstream ownership.
