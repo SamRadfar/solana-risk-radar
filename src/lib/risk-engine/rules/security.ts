@@ -23,8 +23,14 @@ const METRIC = "External security cross-check by RugCheck";
  * verify must never outweigh an on-chain rule it could corroborate. In the
  * Authorities category (58) it can move that category by at most 6/64 = 9.4
  * points, and the overall score of an otherwise clean token by at most 4.
+ *
+ * The weight participates only when RugCheck reports new, RugCheck-specific
+ * security information. A clean, overlap-only or unavailable result carries
+ * weight 0: it is shown as context but can neither enter the denominator nor
+ * lower the 13-signal score.
  */
 export const RUG_SECURITY_MAX_POINTS = 6;
+export const NO_ADDITIONAL_WARNING = "No additional RugCheck-specific warning detected";
 
 /** RugCheck findings that repeat an existing signal: corroboration only. */
 export const OVERLAPPING_FINDINGS: Record<string, { signalId: string; signalLabel: string }> = {
@@ -95,14 +101,36 @@ export function annotateCorroboration(signals: RiskSignal[]): RiskSignal[] {
   });
 }
 
+/**
+ * Report-level step: an eligible RugCheck issue may only add risk. Its category
+ * is a weighted mean, so charging it at a severity below the category's
+ * existing on-chain ratio would *lower* that category. In that case the signal
+ * stays visible with its severity but carries weight 0 for this report.
+ */
+export function enforceNonDecreasing(signals: RiskSignal[]): RiskSignal[] {
+  return signals.map((s) => {
+    if (s.id !== ID || s.status !== "ok" || s.maxPoints === 0) return s;
+    const others = signals.filter((o) => o !== s && o.category === s.category && o.status === "ok");
+    const points = others.reduce((sum, o) => sum + o.points, 0), maxPoints = others.reduce((sum, o) => sum + o.maxPoints, 0);
+    if (maxPoints === 0 || s.points / s.maxPoints >= points / maxPoints) return s;
+    return {
+      ...s, maxPoints: 0, points: 0,
+      explanation: `${s.explanation} In this report the existing on-chain ${s.category} findings already carry a higher share of risk than this finding would, so charging it would lower the category; it is shown but not scored.`,
+      evidence: s.evidence.map((e) => e.label !== "Score participation" ? e : {
+        ...e, value: `Context only for this report: charging this ${s.severity} finding would lower the ${s.category} category (existing on-chain findings already exceed its share), so weight 0 — the 13-signal score is unchanged`,
+      }),
+    };
+  });
+}
+
 export function rugSecurityRule({ mint, mintInfo, rugCheck }: AnalysisInput): RiskSignal {
-  const base = { id: ID, label: LABEL, category: CATEGORY, metric: METRIC, maxPoints: RUG_SECURITY_MAX_POINTS };
+  const base = { id: ID, label: LABEL, category: CATEGORY, metric: METRIC, maxPoints: 0 };
   const source: Evidence = { label: "Source", value: `${RUGCHECK_SOURCE} report summary (external)`, href: `https://rugcheck.xyz/tokens/${mint}` };
 
   if (rugCheck.status === "unavailable") {
     return unavailable({
       ...base,
-      reason: `Not measured: ${rugCheck.reason}. Excluded from the score denominator; missing external data is never treated as low risk.`,
+      reason: `Not measured: ${rugCheck.reason}. Signal 14 does not participate in scoring; its weight is excluded from the denominator, and missing external data is never treated as low risk.`,
       evidence: [source, ...(rugCheck.httpStatus !== null ? [{ label: "HTTP status", value: String(rugCheck.httpStatus) }] : [])],
     });
   }
@@ -111,7 +139,7 @@ export function rugSecurityRule({ mint, mintInfo, rugCheck }: AnalysisInput): Ri
   if (summary.tokenProgram && summary.tokenProgram !== mintInfo.programId) {
     return unavailable({
       ...base,
-      reason: `Not measured: RugCheck reports token program ${summary.tokenProgram}, but the mint is owned by ${mintInfo.programId}. Excluded from the score denominator.`,
+      reason: `Not measured: RugCheck reports token program ${summary.tokenProgram}, but the mint is owned by ${mintInfo.programId}. Signal 14 does not participate in scoring; its weight is excluded from the denominator.`,
       evidence: [source],
     });
   }
@@ -139,6 +167,7 @@ export function rugSecurityRule({ mint, mintInfo, rugCheck }: AnalysisInput): Ri
   const scored = [...issues.values()].sort((a, b) => RANK[b.level] - RANK[a.level] || a.title.localeCompare(b.title));
   const severity = severityForIssues(scored.map((i) => i.level));
   const serious = scored.filter((i) => i.level === "danger").length;
+  const eligible = severity !== "none";
 
   const evidence: Evidence[] = [
     source,
@@ -166,15 +195,21 @@ export function rugSecurityRule({ mint, mintInfo, rugCheck }: AnalysisInput): Ri
     ...(summary.lpLockedPct !== null
       ? [{ label: "LP locked (RugCheck-reported)", value: `${summary.lpLockedPct.toFixed(2)}% — context only; on-chain LP custody is reported separately` }]
       : []),
+    {
+      label: "Score participation",
+      value: eligible
+        ? `Weight ${RUG_SECURITY_MAX_POINTS} participates: RugCheck reported security information the 13 on-chain signals do not measure`
+        : "Context only: no RugCheck-specific issue, so weight 0 — not in the denominator, and the 13-signal score is unchanged",
+    },
   ];
 
-  const observedValue = scored.length === 0
-    ? corroborating.length ? `No additional findings (${plural(corroborating.length, "corroborating finding")})` : "No findings reported"
+  const observedValue = !eligible
+    ? NO_ADDITIONAL_WARNING
     : `${serious ? plural(serious, "serious issue") : plural(scored.length, "warning-level issue")}: ${scored.map((i) => i.title).join("; ")}`;
 
-  const explanation = scored.length === 0
-    ? `RugCheck, an external security scanner, reported no finding beyond what the on-chain signals already measure${corroborating.length ? `; ${plural(corroborating.length, "finding")} it did report ${corroborating.length === 1 ? "repeats" : "repeat"} existing signals and ${corroborating.length === 1 ? "is" : "are"} shown as corroboration only` : ""}. This is the provider's assessment, not proof that the token is safe.`
+  const explanation = !eligible
+    ? `RugCheck, an external security scanner, reported no finding beyond what the on-chain signals already measure${corroborating.length ? `; ${plural(corroborating.length, "finding")} it did report ${corroborating.length === 1 ? "repeats" : "repeat"} existing signals and ${corroborating.length === 1 ? "is" : "are"} shown as corroboration only` : ""}. This signal is therefore context only: it carries no weight and cannot change the score. An empty or clean RugCheck report is not proof that the token is safe.`
     : `RugCheck, an external security scanner, reported ${plural(scored.length, "issue")} that the on-chain signals do not measure. Its findings are a second opinion from a third party: they flag risk to review and do not prove a rug or scam. Only RugCheck-specific issues are scored here, related findings count once, and findings that repeat existing signals are shown as corroboration without a second penalty.`;
 
-  return signal({ ...base, severity, observedValue, explanation, evidence });
+  return signal({ ...base, maxPoints: eligible ? RUG_SECURITY_MAX_POINTS : 0, severity, observedValue, explanation, evidence });
 }

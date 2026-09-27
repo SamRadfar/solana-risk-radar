@@ -361,8 +361,8 @@ describe("maturity rules", () => {
     expect(maturity[0]).toMatchObject({
       id: "pool-maturity", label: "Pool Age", status: "ok", maxPoints: 12,
     });
-    expect(report.totalWeight).toBe(158);
-    expect(report.availableWeight).toBe(158);
+    expect(report.totalWeight).toBe(152);
+    expect(report.availableWeight).toBe(152);
     expect(report.coveragePercent).toBe(100);
     expect(report.categories.find((c) => c.category === "Maturity")).toMatchObject({
       signalCount: 1, maxPoints: 12, weight: 20,
@@ -383,9 +383,9 @@ describe("maturity rules", () => {
       id: "pool-maturity", label: "Pool Age", maxPoints: 12, points: 0,
     });
     expect(report.signals).toHaveLength(14);
-    expect(report.totalWeight).toBe(158);
-    expect(report.availableWeight).toBe(146);
-    expect(report.coveragePercent).toBe(Math.round(146 / 158 * 100));
+    expect(report.totalWeight).toBe(152);
+    expect(report.availableWeight).toBe(140);
+    expect(report.coveragePercent).toBe(Math.round(140 / 152 * 100));
     expect(report.categories.find((c) => c.category === "Maturity")).toMatchObject({
       signalCount: 1, maxPoints: 0, percent: null, weight: 20,
     });

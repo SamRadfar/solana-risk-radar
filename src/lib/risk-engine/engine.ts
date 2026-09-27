@@ -41,7 +41,7 @@ import {
   tradingActivityRule,
 } from "./rules/market";
 import { poolMaturityRule } from "./rules/maturity";
-import { annotateCorroboration, rugSecurityRule } from "./rules/security";
+import { annotateCorroboration, enforceNonDecreasing, rugSecurityRule } from "./rules/security";
 
 /**
  * The deterministic scoring engine.
@@ -120,7 +120,7 @@ const MIN_COVERAGE_FOR_SCORE = 0.4;
 
 /**
  * Signals backed by an external provider rather than on-chain/market reads.
- * They count toward coverage when measured, but can never be what makes an
+ * They count toward coverage only when they participate in scoring, and can never be what makes an
  * otherwise too-thin report publishable: the on-chain signals alone must also
  * meet the coverage threshold.
  */
@@ -365,7 +365,10 @@ export function buildRiskReport(
   input: AnalysisInput,
   { overview, sources, elapsedMs }: BuildReportOptions,
 ): RiskReport {
-  const signals = annotateCorroboration(RULES.map((rule) => rule(input)));
+  // Signal 14 is annotated with the on-chain results it corroborates, then
+  // may only raise risk: clean/overlap-only/unavailable RugCheck results carry
+  // weight 0, and an eligible finding that would lower its category does too.
+  const signals = enforceNonDecreasing(annotateCorroboration(RULES.map((rule) => rule(input))));
   const categories = summariseCategories(signals);
 
   const totalWeight = signals.reduce((sum, s) => sum + s.maxPoints, 0);

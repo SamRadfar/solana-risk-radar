@@ -236,11 +236,12 @@ score summarises the profile, the concerns list surfaces the specific danger.
 
 ## 4. The rules
 
-Total weight **158** across 14 rules in 5 categories: 13 deterministic on-chain
-and market rules (152) plus one external cross-check (6). Remember that weights
-matter only *within* a category.
+14 rules in 5 categories: 13 deterministic on-chain and market rules (weight
+**152**) plus one external cross-check (weight 6, **only when it reports new
+security information**). The scoring denominator is therefore 152, or 158 when
+Signal 14 participates. Remember that weights matter only *within* a category.
 
-### Authorities — 64 points across 5 rules (58 on-chain + 6 external)
+### Authorities — 58 points across 4 on-chain rules, plus 6 when Signal 14 participates
 
 #### `mint-authority` — weight 20
 | Observed | Severity |
@@ -330,7 +331,7 @@ findings add information to the score rather than repeating it.
 
 | Distinct RugCheck-specific issues (level observed live: `warn`, `danger`) | Severity |
 |---|---|
-| None (or corroborating findings only) | `none` |
+| None (or corroborating findings only) | `none` — context only, weight 0 |
 | 1 at `warn` | `low` |
 | 2+ at `warn` | `medium` |
 | 1 at `danger` | `high` |
@@ -340,11 +341,30 @@ Schema drift: an unrecognized finding name might duplicate an existing signal,
 so it counts at most as `warn`. A finding with an unrecognized level is shown
 but not scored. Neither crashes analysis.
 
+**Signal 14 may only add risk.** It participates in scoring (weight 6 in the
+category and coverage denominators) only when RugCheck reports at least one
+RugCheck-specific issue. Otherwise it carries weight 0 and the 13-signal score,
+denominator (152) and coverage are numerically unchanged:
+
+| RugCheck result | Shown | Weight | Effect on score |
+|---|---|---:|---|
+| Clean / empty (e.g. allowlisted USDC) | "No additional RugCheck-specific warning detected" + context | 0 | none |
+| Overlap-only (repeats existing signals) | Same, plus corroborating evidence naming each signal | 0 | none |
+| Unavailable (timeout, 429, 5xx, malformed, no report) | "Not measured" with the reason | 0 | none |
+| RugCheck-specific issue | Scored issue(s) | 6 | can only raise risk |
+
+Because a category is a weighted mean, charging a finding at a severity below
+the category's existing on-chain ratio would *lower* it (for example a `low`
+finding on a custodial stablecoin whose Authorities already score 54%). In that
+case the finding is shown with its severity but carries weight 0 for that
+report, so a new finding can never reduce risk. An empty RugCheck report is not
+proof that a token is safe.
+
 **Unavailable, never low risk.** Timeouts (5 s), HTTP 429/5xx, 4xx (for example
 `unable to generate report`), non-JSON bodies, a missing or non-list `risks`,
 an unreadable finding, an `error` field, or a report whose `tokenProgram` differs
 from the mint's owning program all make the signal `unavailable`: 0 points and
-excluded from the denominator. One request, no retries.
+no weight in the denominator. One request, no retries.
 
 **Why weight 6, in Authorities.** Weight equals the smallest existing rule weight
 (metadata mutability, pool diversity, trade imbalance, volatility): an external
@@ -354,14 +374,23 @@ dilute every token's power mean and shift the calibrated bands. Authorities is
 the largest category (58), so the signal moves it by at most 6/64 = 9.4 points,
 and moves an otherwise clean token's overall score by at most 4 (tested). The
 issues it scores — creator history, withdrawable LP, permanent control — are
-about what the creator retains control of. A clean RugCheck report dilutes
-Authorities by at most ×58/64, as any measured clean rule would. Finally, an
-external signal can never make a too-thin report publishable: the 13 on-chain
-rules must reach the 40% coverage threshold on their own.
+about what the creator retains control of. A clean RugCheck report does not
+dilute Authorities: it carries no weight. Finally, an external signal can never
+make a too-thin report publishable: the 13 on-chain rules must reach the 40%
+coverage threshold on their own.
 
 RugCheck findings are a third party's assessment. The signal flags risk to
 review; it does not prove a rug or scam, and a clean report does not prove a
 token safe.
+
+**Future enhancement (not in this release): on-chain verification via FluxRPC.**
+The intended pipeline is RugCheck → external security finding → FluxRPC → raw
+on-chain verification of consequential findings (for example, confirming LP
+custody or creator linkage before scoring it). FluxRPC would be read from the
+server-only `FLUXRPC_RPC_URL` variable and would be isolated to Signal 14: it
+would not replace the application's Solana RPC, act as a fallback, touch the 13
+on-chain signals or Market Integrity v2.5, or send transactions. None of this is
+implemented yet.
 
 ---
 
@@ -515,7 +544,8 @@ not a price prediction.
 Pool Age is the only maturity signal. It uses the oldest independently corroborated
 pool creation timestamp. Without that measurement, its 12 points are unavailable
 and excluded from the measurable-weight numerator and category scoring. Total
-possible signal weight is 158; coverage is measurable weight / 158 × 100.
+possible signal weight is 152 (158 when Signal 14 participates); coverage is
+measurable weight / total possible weight × 100.
 
 ---
 
