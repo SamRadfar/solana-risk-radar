@@ -147,6 +147,25 @@ export interface PriceHistory {
   fetchedAt: number;
   sourceUrl: string | null;
   error?: string;
+  /** Set when the series is missing because of a transport failure or rate limit (never cached). */
+  transient?: boolean;
+}
+
+/** 4H market context chart, display only; never read by scoring or validation. */
+export interface ChartHistory {
+  status: "available" | "deferred" | "unavailable";
+  points: PricePoint[];
+  pool: string | null;
+  dexId: string | null;
+  /** Original fetch time of the series; never refreshed by reuse. */
+  fetchedAt: number | null;
+  source: string | null;
+  /** Corroborated pools, deepest first, the chart may be drawn from. */
+  candidates: { pairAddress: string; dexId: string }[];
+  attempts: { pool: string; outcome: string }[];
+  /** For "deferred": wait at least this long before the client retries the candidates. */
+  retryAfterMs: number | null;
+  reason: string;
 }
 
 export interface MarketValidation {
@@ -183,6 +202,8 @@ export interface MarketValidation {
   valuation: ValidatedMetric & { basis: ValuationBasis | null };
   /** 24h movement fallback from requested-mint USD history, when attempted. */
   dayReturn?: DayReturnCheck;
+  /** 4H chart context (display only). */
+  chart?: ChartHistory;
   /** How cross-provider price clusters were resolved before price comparison. */
   priceClusters?: ClusterDecision;
   /** Per-request outcome, including whether a fresh cached success was reused. Diagnostics only. */
