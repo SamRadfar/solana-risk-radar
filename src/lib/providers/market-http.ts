@@ -26,18 +26,35 @@ export function safeUrl(value: unknown): string | null {
   catch { return null; }
 }
 
-interface MarketResponse { body: unknown; fetchedAt: number; error: string | null; events: string[] }
+interface MarketResponse { body: unknown; fetchedAt: number; error: string | null; events: string[]; cached?: boolean }
+export interface MarketRequestOptions {
+  /** Optional context (e.g. the 4h chart). Never spends a rate-limited host's budget. */
+  optional?: boolean;
+}
 const pending = new Map<string, Promise<MarketResponse>>();
 const MAX_RETRY_DELAY_MS = 1500;
 /**
- * Last SUCCESSFUL response per URL. Used only when the provider temporarily
- * answers 429/503, only while still within the existing snapshot freshness
- * limit, and always with its ORIGINAL fetchedAt, so downstream freshness checks
- * judge it by its true age. Errors are never retained.
+ * After a 429 without a usable Retry-After, stop sending to that host for this
+ * long: GeckoTerminal answers "Retry-After: 0" yet stays limited for ~20 s
+ * (measured 2026-09-28), and immediate retries only extend the penalty.
+ */
+export const RATE_LIMIT_COOLDOWN_MS = 20_000;
+const cooldownUntil = new Map<string, number>();
+const hostOf = (url: string) => { try { return new URL(url).host; } catch { return url; } };
+function coolingDown(url: string): boolean {
+  const until = cooldownUntil.get(hostOf(url));
+  return until !== undefined && Date.now() < until;
+}
+/**
+ * Last SUCCESSFUL response per exact URL. Reused only when the provider is
+ * temporarily unavailable (429/5xx/timeout/cooldown), only while within the
+ * existing snapshot freshness limit, and always with its ORIGINAL fetchedAt, so
+ * downstream freshness checks judge it by its true age. Errors are never retained.
  */
 const retained = new Map<string, { body: unknown; fetchedAt: number }>();
 const MAX_RETAINED = 256;
 function retain(url: string, body: unknown, fetchedAt: number) {
+  if (body === null || typeof body !== "object") return;
   retained.delete(url);
   retained.set(url, { body, fetchedAt });
   while (retained.size > MAX_RETAINED) retained.delete(retained.keys().next().value!);
@@ -48,22 +65,34 @@ function stillFresh(url: string): { body: unknown; fetchedAt: number } | null {
   if (Date.now() - kept.fetchedAt > MAX_SNAPSHOT_AGE_MS) { retained.delete(url); return null; }
   return kept;
 }
+function reuse(url: string, reason: string, events: string[]): MarketResponse | null {
+  const kept = stillFresh(url);
+  return kept ? { body: kept.body, fetchedAt: kept.fetchedAt, error: null, cached: true,
+    events: [...events, `${reason}; reused a successful response from ${Math.round((Date.now() - kept.fetchedAt) / 1000)}s earlier (within the freshness limit)`] } : null;
+}
 /** Test hook. */
-export function clearRetainedResponses() { retained.clear(); }
+export function clearRetainedResponses() { retained.clear(); cooldownUntil.clear(); }
 
 /** Concurrent identical reads share a promise, never a retained/stale response. */
-export function marketJson(url: string): Promise<MarketResponse> {
+export function marketJson(url: string, options: MarketRequestOptions = {}): Promise<MarketResponse> {
   const existing = pending.get(url);
   if (existing) return existing;
-  const request = requestJson(url).finally(() => pending.delete(url));
+  const request = requestJson(url, options).finally(() => pending.delete(url));
   pending.set(url, request);
   return request;
 }
 
-async function requestJson(url: string): Promise<MarketResponse> {
+async function requestJson(url: string, options: MarketRequestOptions): Promise<MarketResponse> {
   const events: string[] = [];
+  if (coolingDown(url)) {
+    const reason = "Provider rate limit cooldown";
+    const kept = reuse(url, reason, events);
+    if (kept) return kept;
+    // Scored evidence may still try once; optional context never spends the budget.
+    if (options.optional) return { body: null, fetchedAt: Date.now(), error: `${reason}; optional request skipped`, events };
+  }
   for (let attempt = 0; attempt < 2; attempt++) {
-    let error: string, retry = true, delay = 250 + Math.floor(Math.random() * 250);
+    let error: string, retry = true, temporary = true, delay = 250 + Math.floor(Math.random() * 250);
     try {
       const response = await fetch(url, {
         signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
@@ -72,24 +101,29 @@ async function requestJson(url: string): Promise<MarketResponse> {
       if (response.ok) {
         const body = await response.json(), fetchedAt = Date.now();
         retain(url, body, fetchedAt);
+        cooldownUntil.delete(hostOf(url));
         return { body, fetchedAt, error: null, events };
       }
       error = "Market service returned HTTP " + response.status;
-      retry = response.status === 429 || response.status === 503;
-      // A temporary rate limit reuses a still-fresh success instead of spending another request.
-      const kept = retry ? stillFresh(url) : null;
-      if (kept) return { body: kept.body, fetchedAt: kept.fetchedAt, error: null,
-        events: [...events, `${error}; reused a successful response from ${Math.round((Date.now() - kept.fetchedAt) / 1000)}s earlier (within the freshness limit)`] };
+      retry = temporary = response.status === 429 || response.status >= 500;
       const after = response.headers.get("retry-after");
-      if (after !== null) {
-        const ms = /^\d+(\.\d+)?$/.test(after) ? Number(after) * 1000 : Date.parse(after) - Date.now();
-        if (Number.isFinite(ms)) delay = Math.max(delay, ms);
+      const afterMs = after === null ? null : /^\d+(\.\d+)?$/.test(after) ? Number(after) * 1000 : Date.parse(after) - Date.now();
+      if (response.status === 429) {
+        // An explicit "Retry-After: 0" is not guidance (GeckoTerminal sends it while
+        // still limiting): cool down instead of re-hitting the host. An absent
+        // header still allows the one short bounded retry.
+        cooldownUntil.set(hostOf(url), Date.now() + (afterMs !== null && Number.isFinite(afterMs) && afterMs > 0 ? afterMs : RATE_LIMIT_COOLDOWN_MS));
+        if (afterMs !== null && Number.isFinite(afterMs) && afterMs <= 0) retry = false;
       }
+      if (afterMs !== null && Number.isFinite(afterMs)) delay = Math.max(delay, afterMs);
     } catch {
       error = "Market service unavailable or timed out";
     }
-    // Never retry before a long Retry-After; return missing evidence promptly.
-    if (attempt === 1 || !retry || delay > MAX_RETRY_DELAY_MS)
+    // Temporary failure: a still-fresh success is better evidence than nothing.
+    const kept = temporary ? reuse(url, error, events) : null;
+    if (kept) return kept;
+    // Bounded: at most one retry, never before a long Retry-After, never for optional context.
+    if (attempt === 1 || !retry || options.optional || delay > MAX_RETRY_DELAY_MS)
       return { body: null, fetchedAt: Date.now(), error, events };
     events.push(error + "; bounded retry");
     await new Promise(resolve => setTimeout(resolve, delay));

@@ -4,10 +4,10 @@ import { getGeckoSnapshot, getGeckoReferences } from "./gecko-market";
 import { getPriceHistory } from "./geckoterminal";
 import { getMarketData } from "../market/service";
 import { validateMarket } from "../market/validation";
-import { marketJson } from "./market-http";
+import { marketJson, clearRetainedResponses } from "./market-http";
 const MINT="So11111111111111111111111111111111111111112";
 const USDC="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-afterEach(()=>vi.unstubAllGlobals());
+afterEach(()=>{ vi.unstubAllGlobals(); clearRetainedResponses(); });
 describe("provider network contracts",()=>{
   it("one bounded retry recovers 429 and deduplicates concurrent reads",async()=>{
     const mock=vi.fn().mockResolvedValueOnce(new Response("{}",{status:429}))

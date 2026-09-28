@@ -175,23 +175,49 @@ export interface MarketValidation {
   volumeSubset: SubsetCoverage | null;
   activitySubset: (SubsetCoverage & { buys: number; sells: number }) | null;
   change24hSubset: SubsetCoverage | null;
+  /**
+   * Valuation for Liquidity vs Market Cap. Validated circulating market cap when
+   * available; otherwise validated price × meaningful on-chain minted supply,
+   * explicitly labelled and never presented as circulating market cap.
+   */
+  valuation: ValidatedMetric & { basis: ValuationBasis | null };
+  /** 24h movement fallback from requested-mint USD history, when attempted. */
+  dayReturn?: DayReturnCheck;
   /** How cross-provider price clusters were resolved before price comparison. */
   priceClusters?: ClusterDecision;
+  /** Per-request outcome, including whether a fresh cached success was reused. Diagnostics only. */
+  requestLog?: { request: string; cached: boolean; error: string | null }[];
   /** By-address pool corroboration lookup, when performed. Diagnostics only. */
   poolLookup?: { requested: number; returned: number; error: string | null };
   circulatingSupply: number | null;
   totalSupplyUi: number | null;
 }
 
+/** Basis of the valuation used by Liquidity vs Market Cap. */
+export type ValuationBasis = "circulating-market-cap" | "on-chain-supply-valuation";
+
+/** Outcome of the 24h movement history fallback (see withDayReturn). */
+export interface DayReturnCheck {
+  status: "validated" | "conflict" | "unavailable" | "not-needed";
+  reason: string;
+  pool: string | null;
+  referenceTime: number | null;
+  referencePriceUsd: number | null;
+  /** Same-pool provider-reported 24h change (gross) used as corroboration, when present. */
+  samePoolReturn: number | null;
+}
+
 /** Cross-provider price-cluster decision (see crossProviderClusters). */
 export interface ClusterDecision {
   status: "single-market" | "corroborated-conflict" | "not-applicable";
   /** Price range of the corroborated market, when exactly one exists. */
-  market: { min: number; max: number } | null;
+  market: { min: number; max: number; center: number } | null;
   corroborated: { provider: string; min: number; max: number; pools: string[] }[];
   /** Single-provider clusters excluded from price as uncorroborated outliers. */
   quarantined: { provider: string; min: number; max: number; pools: string[] }[];
   quarantinedTokens: string[];
+  /** Physical pools whose price range was quarantined because only duplicated (same-pool) evidence supported it. */
+  duplicatedPools?: string[];
   reason: string;
 }
 

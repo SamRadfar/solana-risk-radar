@@ -57,7 +57,8 @@ describe("cross-provider corroborated price clusters", () => {
   it("two incompatible clusters independently corroborated by both providers keep price blocked", () => {
     const v = validate(snap("dexscreener", [...good(5), absurd("bad-1")]), snap("geckoterminal", [...good(5), absurd("bad-2")]));
     expect(v.priceClusters!.status).toBe("corroborated-conflict");
-    expect(v.price).toMatchObject({ status: "conflict", value: null, reason: "Incompatible price clusters are each independently corroborated by more than one provider" });
+    expect(v.price).toMatchObject({ status: "conflict", value: null });
+    expect(v.priceClusters!.reason).toBe("A conflicting price range is supported by more than one physical pool; it is treated as an independent market");
     expect(scored(v).every(s => s.status === "unavailable")).toBe(true);
   });
 
@@ -158,9 +159,9 @@ describe("rate-limit reliability", () => {
 });
 
 describe("versioning and unchanged neighbours", () => {
-  it("v2.7 invalidates older cached reports and Signal 14 is unchanged", () => {
-    expect(MARKET_ALGORITHM_VERSION).toBe("market-integrity-v2.7");
-    expect(reportCacheKey(MINT)).toBe("market-integrity-v2.7:report:" + MINT);
+  it("the current version invalidates older cached reports and Signal 14 is unchanged", () => {
+    expect(MARKET_ALGORITHM_VERSION).toBe("market-integrity-v2.8");
+    expect(reportCacheKey(MINT)).toBe("market-integrity-v2.8:report:" + MINT);
     const report = buildRiskReport(makeInput({ rugCheck: cleanRugCheck() }), { overview: {} as never, sources: [], elapsedMs: 0 });
     expect(report.signals).toHaveLength(14);
     expect(report.totalWeight).toBe(152);
