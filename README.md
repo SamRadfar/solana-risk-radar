@@ -339,7 +339,7 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:3000>, paste a mint address, or click one of the **Try** chips — USDC,
+Open <http://localhost:3000>, paste a mint address, or click one of the **Try** chips — WIF,
 BONK, JUP, ORCA.
 
 **No API keys. No accounts. No database.** The app works out of the box against public Solana
