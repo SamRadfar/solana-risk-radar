@@ -1,5 +1,5 @@
 import type { MarketValidation, ProviderOpinion, ProviderSnapshot, TokenReference, ValidatedMetric, MetricEvidence, MarketPair, PriceHistory, ValidationState, ObservationDecision, SubsetCoverage } from "./types";
-import { median, providerConsensus } from "./consensus";
+import { crossProviderClusters, median, providerConsensus, type ClusterQuarantine } from "./consensus";
 import { agrees, relativeDifference, MARKET_ALGORITHM_VERSION, PRICE_AGREEMENT_TOLERANCE, CIRCULATION_AGREEMENT_TOLERANCE, CHANGE_AGREEMENT_TOLERANCE, DEPTH_AGREEMENT_TOLERANCE, ACTIVITY_AGREEMENT_TOLERANCE, MAX_HISTORY_AGE_MS, MIN_SUBSET_LIQUIDITY_SHARE } from "./policy";
 
 export function withheld(status: Exclude<ValidationState, "validated">, reason: string, sources: MetricEvidence[] = [], disagreement: number | null = null): ValidatedMetric {
@@ -65,11 +65,28 @@ function subsetReason(label: string, c: SubsetCoverage): string {
 
 /** Pure: the caller supplies time, snapshots and on-chain UI supply. */
 export function validateMarket(mint: string, snapshots: ProviderSnapshot[], references: TokenReference[], now: number, totalSupplyUi: number | null): MarketValidation {
-  const providers = snapshots.map(s => providerConsensus(s, references, now)).sort((a,b) => a.provider.localeCompare(b.provider));
+  // Cross-provider cluster corroboration first: an uncorroborated single-provider
+  // cluster is quarantined (re-evaluated without it) only when the corroborated
+  // clusters form one compatible market. Everything else is unchanged.
+  const initial = snapshots.map(s => providerConsensus(s, references, now));
+  const priceClusters = crossProviderClusters(initial);
+  const quarantine = new Map<string, ClusterQuarantine>();
+  if (priceClusters.status === "single-market") {
+    for (const q of priceClusters.quarantined) {
+      const entry = quarantine.get(q.provider) ?? { pools: new Set<string>(), token: false };
+      q.pools.forEach(pool => entry.pools.add(pool));
+      quarantine.set(q.provider, entry);
+    }
+    for (const provider of priceClusters.quarantinedTokens) quarantine.set(provider, { pools: quarantine.get(provider)?.pools ?? new Set<string>(), token: true });
+  }
+  const providers = (quarantine.size ? snapshots.map(s => providerConsensus(s, references, now, quarantine.get(s.provider))) : initial)
+    .sort((a,b) => a.provider.localeCompare(b.provider));
   const priceSources = evidence(providers, p => p.priceUsd);
   let price = compareMetric(priceSources);
   if (snapshots.some(s => s.mint !== mint) || new Set(providers.map(p => p.provider)).size !== providers.length)
     price = withheld("conflict", "Duplicate provider or requested-mint mismatch", priceSources);
+  else if (priceClusters.status === "corroborated-conflict")
+    price = withheld("conflict", priceClusters.reason, priceSources);
   else if (providers.some(p => p.status === "conflict"))
     price = withheld("conflict", "A provider contains unresolved incompatible valuation clusters", priceSources);
 
@@ -179,7 +196,7 @@ export function validateMarket(mint: string, snapshots: ProviderSnapshot[], refe
     history: null, historyCheck: { status: "unavailable", reason: "History not checked", disagreement: null },
     volumeSubset: volumeSubset.withheldAs ? null : volumeSubset.coverage,
     activitySubset: activitySubset.withheldAs ? null : { ...activitySubset.coverage!, buys: sum(activitySubset.measured.map(d => d.buys.value!)), sells: sum(activitySubset.measured.map(d => d.sells.value!)) },
-    change24hSubset,
+    change24hSubset, priceClusters,
     circulatingSupply: circulation.value, totalSupplyUi };
 }
 

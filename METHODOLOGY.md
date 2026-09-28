@@ -389,7 +389,7 @@ on-chain verification of consequential findings (for example, confirming LP
 custody or creator linkage before scoring it). FluxRPC would be read from the
 server-only `FLUXRPC_RPC_URL` variable and would be isolated to Signal 14: it
 would not replace the application's Solana RPC, act as a fallback, touch the 13
-on-chain signals or Market Integrity v2.6, or send transactions. None of this is
+on-chain signals or Market Integrity v2.7, or send transactions. None of this is
 implemented yet.
 
 ---

@@ -132,9 +132,14 @@ describe("two-level consensus (replaces pool-weight majority trust)", () => {
     expect(v.status).toBe("single_source"); expect(v.confidence).toBe("low"); expect(v.price.value).toBeNull();
     expect(run(a,snap("b",[row({priceUsd:5000})])).status).toBe("conflict");
   });
-  it.each([.0001,5000])("minority incompatible cluster at %s cannot be discarded by votes or depth", priceUsd => {
-    const a=snap("a",[row(),row({pairAddress:"bad",priceUsd,liquidityUsd:1e15})]);
-    expect(run(a).status).toBe("conflict");
+  it.each([.0001,5000])("incompatible cluster at %s is decided by cross-provider corroboration, never by votes or depth", priceUsd => {
+    // Uncorroborated (only provider a sees it), even with huge depth and MORE rows: quarantined.
+    const a=snap("a",[row(),...["bad-1","bad-2","bad-3"].map(pairAddress=>row({pairAddress,priceUsd,liquidityUsd:1e15}))]);
+    const v=run(a);
+    expect(v.status).toBe("validated"); expect(v.price.value).toBe(1);
+    expect(v.priceClusters!.quarantined.map(q=>q.pools.length)).toEqual([3]);
+    // Independently corroborated by provider b too: a genuine conflict, no winner.
+    expect(run(a,snap("b",[row(),row({pairAddress:"bad-4",priceUsd})])).status).toBe("conflict");
   });
   it("D: coherently inflating price, cap and liquidity does not self-validate",()=>{
     const a=snap("a",[row({priceUsd:5000,marketCap:5e9,liquidityUsd:5e8})]);

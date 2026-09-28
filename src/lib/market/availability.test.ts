@@ -222,7 +222,7 @@ describe("price safety is unchanged", () => {
     expect(Object.values(signals(blocked)).every(x => x.status === "unavailable")).toBe(true);
   });
   it("market interpretation version is unchanged and Signal 14 is untouched", () => {
-    expect(MARKET_ALGORITHM_VERSION).toBe("market-integrity-v2.6");
+    expect(MARKET_ALGORITHM_VERSION).toBe("market-integrity-v2.7");
     const report = buildRiskReport(makeInput({ rugCheck: cleanRugCheck() }), { overview: {} as never, sources: [], elapsedMs: 0 });
     expect(report.signals).toHaveLength(14);
     expect(report.totalWeight).toBe(152);

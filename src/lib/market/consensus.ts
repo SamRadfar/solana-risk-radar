@@ -1,4 +1,4 @@
-import type { ObservationDecision, ProviderOpinion, ProviderSnapshot, TokenReference } from "./types";
+import type { ClusterDecision, ObservationDecision, ProviderOpinion, ProviderSnapshot, TokenReference } from "./types";
 import { agrees, relativeDifference, MAX_SNAPSHOT_AGE_MS, MIN_OBSERVATION_LIQUIDITY_USD, NATIVE_USD_TOLERANCE, POOL_CLUSTER_TOLERANCE, CHANGE_AGREEMENT_TOLERANCE, CIRCULATION_AGREEMENT_TOLERANCE } from "./policy";
 
 export function median(values: number[]): number | null {
@@ -17,13 +17,17 @@ function measurement(values: number[], tolerance: number) {
   return { value: median(values), conflict: values.length > 1 && !agrees(Math.min(...values), Math.max(...values), tolerance) };
 }
 
+/** Rows a cross-provider cluster decision removed from this provider's price vote. */
+export interface ClusterQuarantine { pools: Set<string>; token: boolean }
+export const QUARANTINE_REASON = "Price cluster quarantined: not corroborated by any independent provider";
+
 /**
  * No USD-liquidity voting. A quote dependency contributes one group opinion.
  * Incompatible credible clusters remain a conflict even when a minority has
  * fewer pools. Counter-price evidence may veto a contradictory USD conversion,
  * but cannot add an independent vote or manufacture a replacement USD price.
  */
-export function providerConsensus(snapshot: ProviderSnapshot, references: TokenReference[], now: number): ProviderOpinion {
+export function providerConsensus(snapshot: ProviderSnapshot, references: TokenReference[], now: number, quarantine?: ClusterQuarantine): ProviderOpinion {
   const counts = new Map<string, number>();
   const rows = [...snapshot.observations.map(o => ({ o, lookup: false })), ...(snapshot.lookups ?? []).map(o => ({ o, lookup: true }))];
   for (const { o } of rows) if (o.pairAddress) counts.set(o.pairAddress, (counts.get(o.pairAddress) ?? 0) + 1);
@@ -48,7 +52,8 @@ export function providerConsensus(snapshot: ProviderSnapshot, references: TokenR
       (counts.get(o.pairAddress) ?? 0) > 1 ? "Duplicate pool identity; all copies quarantined" :
       internallyInconsistent ? "Provider USD fields and native ratio are internally inconsistent" :
       nativeConflict ? "Native ratio contradicts independent counter-asset USD evidence" :
-      o.volume24hUsd === 0 ? "Zero reported 24h volume; current traded price unproven" : null);
+      o.volume24hUsd === 0 ? "Zero reported 24h volume; current traded price unproven" :
+      !lookup && quarantine?.pools.has(o.pairAddress) ? QUARANTINE_REASON : null);
     return { ...o, accepted: rejection === null, rejection, ...(lookup ? { lookup: true } : {}), weight: 0, correlationKey: snapshot.provider + ":" + (o.counterMint ?? "unknown"),
       nativeCheck: { status: disagreement === null ? "unavailable" : nativeConflict ? "conflict" : "consistent", referenceProvider: refs.map(r => r.provider).sort().join(",") || null, counterPriceUsd: counter, expectedPriceUsd: expected, disagreement } };
   }).sort((a, b) => (a.pairAddress ?? "").localeCompare(b.pairAddress ?? "") || JSON.stringify(a).localeCompare(JSON.stringify(b)));
@@ -75,7 +80,7 @@ export function providerConsensus(snapshot: ProviderSnapshot, references: TokenR
     return { counterMint, count: rows.length, priceUsd: median(prices)!, conflict: !agrees(Math.min(...prices), Math.max(...prices), POOL_CLUSTER_TOLERANCE) };
   });
   // Token endpoints often select a top pool; they are NOT another source.
-  const token = snapshot.token?.mint === snapshot.mint && fresh(snapshot.token.fetchedAt, now) ? snapshot.token : null;
+  const token = snapshot.token?.mint === snapshot.mint && fresh(snapshot.token.fetchedAt, now) && !quarantine?.token ? snapshot.token : null;
   const candidates = groups.map(g => g.priceUsd);
   if (token) candidates.push(token.priceUsd);
   const conflict = groups.some(g => g.conflict) || (candidates.length > 1 && !agrees(Math.min(...candidates), Math.max(...candidates), POOL_CLUSTER_TOLERANCE));
@@ -97,4 +102,47 @@ export function providerConsensus(snapshot: ProviderSnapshot, references: TokenR
     priceChange24h: priceUsd !== null && !changes.conflict && changes.value !== null ? (changes.value - 1) * 100 : null,
     changeConflict: changes.conflict, impliedCirculating: priceUsd !== null && !circulation.conflict ? circulation.value : null,
     circulationConflict: circulation.conflict, dispersion: spread(candidates), groups, observations, errors: [...snapshot.errors] };
+}
+
+/** Median price of a cluster's accepted, provider-listed rows. */
+function clusterCenter(opinion: ProviderOpinion, pools: string[]): number | null {
+  return median(opinion.observations.filter(o => o.accepted && !o.lookup && pools.includes(o.pairAddress!)).map(o => o.priceUsd!));
+}
+
+/**
+ * Cross-provider cluster corroboration. A provider's price cluster is
+ * corroborated only when a DIFFERENT provider's pool-based cluster agrees with
+ * it (existing cluster tolerance). Pool count, liquidity and token endpoints
+ * never corroborate. Outcomes:
+ * - corroborated clusters form ONE compatible market: every uncorroborated
+ *   cluster (and a token-endpoint price outside that market) is quarantined and
+ *   cannot vote, enter a median or invalidate the corroborated market;
+ * - corroborated clusters form SEVERAL incompatible markets: conflict, as before;
+ * - nothing corroborated (including a single provider): unchanged behaviour.
+ */
+export function crossProviderClusters(opinions: ProviderOpinion[]): ClusterDecision {
+  const eligible = opinions.filter(p => p.status !== "unavailable").sort((a, b) => a.provider.localeCompare(b.provider));
+  const clusters = eligible.flatMap(p => p.clusters.map(c => ({ provider: p.provider, min: c.min, max: c.max, pools: c.pools, center: clusterCenter(p, c.pools) })))
+    .filter((c): c is typeof c & { center: number } => c.center !== null).sort((a, b) => a.provider.localeCompare(b.provider) || a.min - b.min);
+  const corroborated = clusters.filter(c => clusters.some(d => d.provider !== c.provider && agrees(c.center, d.center, POOL_CLUSTER_TOLERANCE)));
+  const describe = ({ provider, min, max, pools }: typeof clusters[number]) => ({ provider, min, max, pools });
+  const none: ClusterDecision = { status: "not-applicable", market: null, corroborated: [], quarantined: [], quarantinedTokens: [],
+    reason: "No price cluster is corroborated by an independent provider; per-provider consensus applies unchanged" };
+  if (!corroborated.length) return none;
+  const markets: { first: number; members: typeof corroborated }[] = [];
+  for (const c of [...corroborated].sort((a, b) => a.center - b.center)) {
+    const market = markets.at(-1);
+    if (market && agrees(market.first, c.center, POOL_CLUSTER_TOLERANCE)) market.members.push(c);
+    else markets.push({ first: c.center, members: [c] });
+  }
+  if (markets.length > 1) return { ...none, status: "corroborated-conflict", corroborated: corroborated.map(describe),
+    reason: "Incompatible price clusters are each independently corroborated by more than one provider" };
+  const members = markets[0].members, center = median(members.map(m => m.center))!;
+  const quarantined = clusters.filter(c => !members.includes(c)).map(describe);
+  const quarantinedTokens = eligible.filter(p => p.token && !agrees(p.token.priceUsd, center, POOL_CLUSTER_TOLERANCE)).map(p => p.provider);
+  return { status: "single-market", market: { min: Math.min(...members.map(m => m.min)), max: Math.max(...members.map(m => m.max)) },
+    corroborated: members.map(describe), quarantined, quarantinedTokens,
+    reason: quarantined.length || quarantinedTokens.length
+      ? "One price range is corroborated across providers; uncorroborated single-provider clusters are quarantined as outliers"
+      : "One price range is corroborated across providers" };
 }

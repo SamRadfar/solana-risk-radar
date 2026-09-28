@@ -1,6 +1,6 @@
 # Market integrity v2
 
-Algorithm/schema: `market-integrity-v2.6`. This layer changes measurement eligibility,
+Algorithm/schema: `market-integrity-v2.7`. This layer changes measurement eligibility,
 not risk bands, category weights, holder classification or authority rules.
 Public market-data providers can be wrong, including in correlated ways. Agreement
 is corroboration, not a guarantee of executable prices or independent upstream ownership.
@@ -66,6 +66,23 @@ candles are removed; conflicting duplicate candles invalidate the series.
 - A token endpoint and pools from one provider produce ONE provider opinion.
 - Compare usable provider opinions, with one vote per unique provider ID.
   Any unresolved provider cluster conflict prevents canonical price publication.
+- **Cross-provider cluster corroboration (v2.7).** Before providers are compared,
+  each provider's price clusters are checked against the OTHER providers'
+  pool-based clusters (existing 10% cluster tolerance). A cluster is corroborated
+  only when a different provider independently supports the same range; pool
+  count, dollar depth and token endpoints never corroborate.
+  - Corroborated clusters form ONE compatible market: every uncorroborated,
+    single-provider cluster (and a token-endpoint price outside that market) is
+    quarantined as an outlier. It cannot vote, enter a median, or invalidate the
+    corroborated market or unrelated pool metrics. Providers are re-evaluated
+    without it and must still agree within the unchanged 5% price tolerance.
+  - Corroborated clusters form SEVERAL incompatible markets: conflict; no winner.
+  - Nothing corroborated, or only one provider: unchanged behaviour (a single
+    provider never establishes a canonical price).
+  Example: the 2026-09-27 BONK snapshot had one stale DexScreener SOL pool at
+  $0.00000249 beside 23 pools near $0.00000372 that GeckoTerminal corroborated;
+  v2.6 withheld every market metric, v2.7 quarantines the stale pool. The
+  historical JUP ~$1,638 pools stay out of price in every case.
   Another provider can be added via snapshots without rewriting risk rules.
 
 ## States and per-metric policy
@@ -194,7 +211,10 @@ DS, GT token and GT pools start concurrently. Then one bounded counter-token bat
 (maximum 12 sorted distinct mints) is fetched; then, only when no pool could be
 corroborated, one GT by-address pool lookup (maximum 30 pools); then at most one
 history request.
-Each request times out after eight seconds. An outage lowers coverage; it cannot
+Each request times out after eight seconds. A temporary 429/503 reuses the last
+successful response for the same URL only while it is within the existing 90 s
+snapshot freshness limit, carrying its original timestamp; errors are never
+retained, and the optional chart endpoint never caches transport failures. An outage lowers coverage; it cannot
 elevate another provider's credibility. No paid service, secret or environment
 change is needed. Rate limits on shared public IPs can still reduce availability.
 
