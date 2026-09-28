@@ -1,5 +1,32 @@
 @import "tailwindcss";
 
+/*
+ * Aceternity Background Ripple Effect (landing hero).
+ * `dark:` applies inside an element with the `dark` class, so the ripple can
+ * use its dark palette on this dark-only canvas regardless of OS setting.
+ * Nothing else in the app uses `dark:` utilities.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --animate-cell-ripple: cell-ripple var(--duration, 200ms) ease-out none 1
+    var(--delay, 0ms);
+
+  @keyframes cell-ripple {
+    0% {
+      opacity: 0.4;
+    }
+
+    50% {
+      opacity: 0.8;
+    }
+
+    100% {
+      opacity: 0.4;
+    }
+  }
+}
+
 /**
  * Solana Risk Radar — visual system.
  *
@@ -188,8 +215,12 @@ body {
   animation: breathe 38s ease-in-out infinite;
 }
 
-/* 4. Technical mesh. Masked twice so it never reaches the content body. */
+/* 4. Technical mesh. Masked twice so it never reaches the content body.
+   Disabled while the hero's interactive ripple grid is being evaluated: two
+   grids at different pitches read as a moiré. Kept intact so re-enabling it
+   is a one-line change. */
 .ambient-grid {
+  display: none;
   background-image:
     linear-gradient(to right, rgba(190, 215, 255, 0.032) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(190, 215, 255, 0.032) 1px, transparent 1px);

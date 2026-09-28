@@ -1,5 +1,16 @@
 import Reveal from "./Reveal";
+import { BackgroundRippleEffect } from "./ui/background-ripple-effect";
 import TokenInputForm from "./TokenInputForm";
+
+const RIPPLE_ROWS = 12;
+const RIPPLE_CELL = 56;
+/* Horizontal: clear behind the headline, full centre-right, then a long eased
+   fade to zero at the right edge. Vertical: partial at the top, full through
+   the hero, then a long fade to zero at the grid's last row. */
+const RIPPLE_MASK = [
+  "linear-gradient(to right, transparent 10%, #000 50%, #000 calc(100% - min(340px, 38%)), rgba(0,0,0,0.55) calc(100% - min(170px, 19%)), transparent 100%)",
+  "linear-gradient(to bottom, rgba(0,0,0,0.55) 0px, #000 200px, #000 300px, rgba(0,0,0,0.5) 480px, transparent 100%)",
+].join(", ");
 
 /**
  * The landing hero.
@@ -42,9 +53,40 @@ export default function LandingHero({
         which is fixed and full-viewport and therefore has no edge anywhere on
         screen to cut against.
       */}
+      {/*
+        Aceternity background ripple, layered ABOVE the global ambient gradient
+        (fixed, full-viewport, rendered by AmbientBackground) and BELOW the hero
+        content. Masked so it is strongest centre-right and fades out behind the
+        headline and before every edge of its box. Opacity is at 100%
+        temporarily, for inspection.
+
+        Its top is pulled up past the sticky header and main's top padding
+        (py-8 / sm:py-10) so the grid starts flush with the top of the page.
+
+        Right and bottom run past the hero box so neither edge is a cut: the
+        right edge reaches almost to the viewport (capped at 240px, and kept
+        inside it so there is no horizontal overflow), and the height is the
+        grid's own (rows x cell), so the grid never ends above a visible mask.
+        Two edge fades, intersected, take it smoothly to zero at both edges;
+        the left fade keeps the headline clear, as before.
+      */}
+      <div
+        className="dark absolute left-0 top-[calc(-1*(var(--header-h)+2rem))] sm:top-[calc(-1*(var(--header-h)+2.5rem))] z-0 overflow-hidden opacity-100"
+        style={{
+          right: "max(-240px, calc((100% - 100vw) / 2 + 12px))",
+          height: RIPPLE_ROWS * RIPPLE_CELL,
+          maskImage: RIPPLE_MASK,
+          WebkitMaskImage: RIPPLE_MASK,
+          maskComposite: "intersect",
+          WebkitMaskComposite: "source-in",
+        }}
+        aria-hidden="true"
+      >
+        <BackgroundRippleEffect rows={RIPPLE_ROWS} cols={27} cellSize={RIPPLE_CELL} />
+      </div>
       {/* 56/44 — the analyser needs enough width to show a full 44-character
           mint address without the field scrolling. */}
-      <div className="grid items-start gap-10 lg:gap-16 lg:grid-cols-[56fr_44fr]">
+      <div className="pointer-events-none relative z-10 grid items-start gap-10 lg:gap-16 lg:grid-cols-[56fr_44fr] [&>*]:pointer-events-auto">
         <Message />
         <Analyser onAnalyze={onAnalyze} loading={loading} />
       </div>
