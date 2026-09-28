@@ -1,29 +1,77 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { PricePoint } from "@/lib/providers/geckoterminal";
 import type { RiskReport } from "@/lib/risk-engine/types";
+import type { PriceHistory } from "@/lib/market/types";
+import { chartAcceptance } from "@/lib/market/chart";
 import { formatPrice } from "@/lib/format";
 
 import styles from "./MarketContextChart.module.css";
 
-/** History has already been checked on the server before scoring. */
+/** Bounded client retry for a rate-limited chart: at most two rounds, short waits. */
+const MIN_RETRY_MS = 1_500;
+const MAX_RETRY_MS = 25_000;
+const MAX_ROUNDS = 2;
+
+type Shown = { points: PricePoint[]; dex: string | null } | null;
+
+/**
+ * Display-only 4H context. The server tries the corroborated pools; when the
+ * history provider was rate-limited it defers, and the page retries the same
+ * pools through /api/history with the same acceptance rule. Nothing here is
+ * scored, and a chart failure never touches a risk signal.
+ */
 export default function MarketContextChart({ report }: { report: RiskReport }) {
-  const { history, historyStatus, historyReason, poolDex } = report.market;
-  const ready = history?.available && historyStatus === "consistent";
+  const { history, historyStatus, historyReason, poolDex, chart } = report.market;
+  const legacy: Shown = !chart && history?.available && historyStatus === "consistent" ? { points: history.points, dex: poolDex } : null;
+  const initial: Shown = chart?.status === "available" ? { points: chart.points, dex: chart.dexId } : legacy;
+  const [shown, setShown] = useState<Shown>(initial);
+  const [pending, setPending] = useState(chart?.status === "deferred");
+  const [reason, setReason] = useState(chart ? chart.reason : historyReason);
+
+  useEffect(() => {
+    if (chart?.status !== "deferred" || !chart.candidates.length) return;
+    let cancelled = false;
+    const mint = report.overview.mint, spot = report.market.priceUsd;
+    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, Math.min(MAX_RETRY_MS, Math.max(MIN_RETRY_MS, ms))));
+    (async () => {
+      let wait = chart.retryAfterMs ?? 0, last = chart.reason;
+      for (let round = 0; round < MAX_ROUNDS && !cancelled; round++) {
+        await sleep(wait);
+        let transient = false;
+        for (const candidate of chart.candidates) {
+          if (cancelled) return;
+          try {
+            const response = await fetch(`/api/history?mint=${encodeURIComponent(mint)}&pool=${encodeURIComponent(candidate.pairAddress)}`);
+            const series = await response.json() as PriceHistory & { retryAfterMs?: number };
+            const verdict = response.ok ? chartAcceptance(series, mint, candidate.pairAddress, spot) : { ok: false as const, reason: `History HTTP ${response.status}`, transient: true };
+            if (verdict.ok) { if (!cancelled) { setShown({ points: series.points, dex: candidate.dexId }); setPending(false); } return; }
+            last = verdict.reason;
+            if (verdict.transient) { transient = true; wait = series.retryAfterMs ?? MIN_RETRY_MS; break; }
+          } catch { transient = true; last = "History request failed"; break; }
+        }
+        if (!transient) break;
+      }
+      if (!cancelled) { setPending(false); setReason(last); }
+    })();
+    return () => { cancelled = true; };
+  }, [chart, report.overview.mint, report.market.priceUsd]);
+
+  const conflict = report.market.status === "conflict" || historyStatus === "conflict";
   return (
     <section className={styles.panel} aria-label="4 hour market context">
       <header className={styles.head}>
         <div><div className="eyebrow">4H market context</div>
-          {ready && <Change points={history.points} />}
+          {shown && <Change points={shown.points} />}
         </div>
-        {ready && poolDex && <span className={styles.source}>via {poolDex}</span>}
+        {shown?.dex && <span className={styles.source}>via {shown.dex}</span>}
       </header>
-      {ready ? <Plot points={history.points} /> : (
-        <div className={styles.placeholder}>
-          <span className={styles.absentTitle}>{historyStatus === "conflict" || report.market.status === "conflict" ? "Market data conflict" : "4H price history unavailable"}</span>
-          <span className={styles.absentReason}>{report.market.status === "conflict" ? report.market.reason : historyReason}</span>
+      {shown ? <Plot points={shown.points} /> : (
+        <div className={styles.placeholder} data-testid="chart-unavailable">
+          <span className={styles.absentTitle}>{conflict ? "Market data conflict" : pending ? "Loading 4H price history…" : "4H price history unavailable"}</span>
+          <span className={styles.absentReason}>{report.market.status === "conflict" ? report.market.reason : pending ? "The history provider is briefly rate-limited; retrying verified pools." : reason}</span>
         </div>
       )}
       <p className={styles.caption}>Market context · contradictions affect data validation; the four-hour return is not scored.</p>

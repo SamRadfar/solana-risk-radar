@@ -454,6 +454,7 @@ export function buildRiskReport(
       history: validationOf(input.marketData).history,
       historyStatus: validationOf(input.marketData).historyCheck.status,
       historyReason: validationOf(input.marketData).historyCheck.reason,
+      chart: validationOf(input.marketData).chart ?? null,
       available: input.marketData.available,
       priceUsd: spotPrice(input.marketData),
       priceChange24hPercent: priceChange24h(input.marketData),

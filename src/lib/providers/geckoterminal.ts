@@ -1,6 +1,6 @@
 import { validateMintAddress } from "../solana/address";
 import type { PriceHistory, PricePoint } from "../market/types";
-import { object, list, positive, marketJson } from "./market-http";
+import { object, list, positive, marketJson, cooldownRemainingMs } from "./market-http";
 export type { PriceHistory, PricePoint } from "../market/types";
 export const HISTORY_WINDOW_MS = 4 * 60 * 60 * 1000;
 const ENDPOINT = "https://api.geckoterminal.com/api/v2/networks/solana/pools";
@@ -36,7 +36,11 @@ export async function getPriceHistory(mint: string, pool: string, now?: number):
   // Chart context is optional: it never spends a rate-limited provider's budget.
   const result = await marketJson(url, { optional: true });
   const history = normalizeHistory(result.body, mint, pool, now ?? result.fetchedAt, url);
-  return { ...history, events: result.events, ...(result.error ? { error: result.error } : {}) };
+  return { ...history, events: result.events, ...(result.error ? { error: result.error, transient: true } : {}) };
+}
+/** Chart history URL (for rate-limit cooldown lookups). */
+export function historyRetryAfterMs(): number {
+  return cooldownRemainingMs(ENDPOINT);
 }
 
 /** About 30 hourly candles: enough to reach the close ~24 h before now. */

@@ -1,9 +1,10 @@
 import { getDexScreenerSnapshot } from "../providers/dexscreener";
 import { geckoReferencesFromPools, getGeckoPoolsByAddress, getGeckoReferences, getGeckoSnapshot } from "../providers/gecko-market";
-import { getDayPriceHistory, getPriceHistory } from "../providers/geckoterminal";
+import { getDayPriceHistory, getPriceHistory, historyRetryAfterMs } from "../providers/geckoterminal";
+import { buildChart, chartAcceptance, chartCandidates } from "./chart";
 import { MAX_POOL_LOOKUPS, MAX_QUOTE_REFERENCES, MIN_OBSERVATION_LIQUIDITY_USD } from "./policy";
 import { validateMarket, withDayReturn, withHistory } from "./validation";
-import type { MarketData, MarketValidation } from "./types";
+import type { MarketData, MarketValidation, PriceHistory } from "./types";
 
 const reused = (events: string[] | undefined) => (events ?? []).some(e => e.includes("reused a successful response"));
 
@@ -60,11 +61,27 @@ export async function getMarketData(mint: string, totalSupplyUi: number | null):
     requestLog.push({ request: "geckoterminal 24h requested-mint USD history", cached: reused(day.events), error: day.error ?? null });
   }
   // Optional chart context last; it never spends a rate-limited provider's budget.
+  // The history contradiction check (withHistory) is unchanged and still uses
+  // validation.historyPool; the chart below is display-only and separate.
+  let historyPoolSeries: PriceHistory | null = null;
   if (validation.historyPool) {
     const history = await getPriceHistory(mint, validation.historyPool.pairAddress);
+    historyPoolSeries = history;
     validation = withHistory(validation, history, Date.now());
     requestLog.push({ request: "geckoterminal 4h chart history (optional)", cached: reused(history.events), error: history.error ?? null });
   }
+  // 4H chart: corroborated pools deepest first, reusing the series already read
+  // for historyPool; stop at the first acceptable one or when the provider is
+  // rate-limited (the page then retries the same pools via /api/history).
+  const attempts: Parameters<typeof buildChart>[1] = [];
+  for (const candidate of chartCandidates(validation)) {
+    const series = candidate.pairAddress === validation.historyPool?.pairAddress && historyPoolSeries
+      ? historyPoolSeries : await getPriceHistory(mint, candidate.pairAddress);
+    attempts.push({ pool: candidate.pairAddress, dexId: candidate.dexId, history: series });
+    const verdict = chartAcceptance(series, mint, candidate.pairAddress, validation.price.value);
+    if (verdict.ok || verdict.transient) break;
+  }
+  validation.chart = buildChart(validation, attempts, historyRetryAfterMs());
   validation.requestLog = requestLog;
   const identity = validation.providers.flatMap(p => p.observations).find(o => o.accepted);
   return { available: dex.available || gecko.available, pairs: validation.pairs, validation,

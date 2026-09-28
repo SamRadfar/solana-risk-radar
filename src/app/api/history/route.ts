@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { validateMintAddress } from "@/lib/solana/address";
-import { getPriceHistory } from "@/lib/providers/geckoterminal";
+import { getPriceHistory, historyRetryAfterMs } from "@/lib/providers/geckoterminal";
 import { historyCacheKey } from "@/lib/market/policy";
 import { getCached, setCached } from "@/lib/cache";
 
@@ -36,11 +36,11 @@ export async function GET(request: NextRequest) {
   const history = await getPriceHistory(mint.address, pool.address);
 
   // A token with no indexed history is cached briefly so it does not send a
-  // request upstream on every render. Transport failures (429, timeout) are
-  // never cached: they are not evidence, and a retry may succeed.
-  if (!history.error?.startsWith("Market service")) setCached(key, history, 60_000);
+  // request upstream on every render. Transport failures and rate-limit skips
+  // (429, timeout, cooldown) are never cached: they are not evidence.
+  if (!history.transient) setCached(key, history, 60_000);
 
-  return NextResponse.json(history, {
+  return NextResponse.json(history.transient ? { ...history, retryAfterMs: historyRetryAfterMs() } : history, {
     headers: { "Cache-Control": "private, no-store", "X-Cache": "miss" },
   });
 }

@@ -70,6 +70,11 @@ function reuse(url: string, reason: string, events: string[]): MarketResponse | 
   return kept ? { body: kept.body, fetchedAt: kept.fetchedAt, error: null, cached: true,
     events: [...events, `${reason}; reused a successful response from ${Math.round((Date.now() - kept.fetchedAt) / 1000)}s earlier (within the freshness limit)`] } : null;
 }
+/** Remaining cooldown for a URL's host, in ms (0 when not cooling down). */
+export function cooldownRemainingMs(url: string): number {
+  const until = cooldownUntil.get(hostOf(url));
+  return until === undefined ? 0 : Math.max(0, until - Date.now());
+}
 /** Test hook. */
 export function clearRetainedResponses() { retained.clear(); cooldownUntil.clear(); }
 

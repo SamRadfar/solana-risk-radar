@@ -181,6 +181,8 @@ export interface MarketSnapshot {
   history: PriceHistory | null;
   historyStatus: "consistent" | "conflict" | "unavailable";
   historyReason: string;
+  /** 4H chart context (display only; never an input to any signal). */
+  chart: import("../market/types").ChartHistory | null;
   /** False when the market provider returned nothing for this mint. */
   available: boolean;
   priceUsd: number | null;
