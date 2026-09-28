@@ -10,10 +10,16 @@ import {
   type Band,
 } from "../helpers";
 import {
-  marketCap,
+  marketValuation,
   pairsByLiquidity,
   totalLiquidity,
 } from "../../market/access";
+
+/** How each valuation basis is named and explained in evidence. */
+const VALUATION_BASIS = {
+  "circulating-market-cap": { noun: "market cap", long: "market capitalisation", evidence: "Circulating market cap: validated price × provider-corroborated circulating supply" },
+  "on-chain-supply-valuation": { noun: "on-chain supply valuation", long: "on-chain supply valuation", evidence: "On-chain supply valuation: Validated price × current on-chain minted supply (not verified circulating market cap)" },
+} as const;
 
 const CATEGORY = "Liquidity" as const;
 
@@ -137,12 +143,15 @@ export function liquidityRatioRule({ marketData, mintInfo }: AnalysisInput): Ris
   const METRIC = "Liquidity as a share of market capitalisation";
   const MAX_POINTS = 10;
 
-  const cap = marketData.available
-    ? marketCap(marketData, mintInfo.supplyIsMeaningful ? mintInfo.supplyUi : undefined)
+  // Validated circulating market cap first; otherwise a transparently labelled
+  // on-chain supply valuation (validated price × meaningful minted supply).
+  const valuation = marketData.available
+    ? marketValuation(marketData, mintInfo.supplyIsMeaningful ? mintInfo.supplyUi : undefined)
     : null;
+  const cap = valuation?.value ?? null;
   const liquidity = marketData.available ? totalLiquidity(marketData) : 0;
 
-  if (!marketData.available || cap === null || cap <= 0 || liquidity === null) {
+  if (!marketData.available || valuation === null || cap === null || cap <= 0 || liquidity === null) {
     return unavailable({
       id: ID,
       label: LABEL,
@@ -150,11 +159,14 @@ export function liquidityRatioRule({ marketData, mintInfo }: AnalysisInput): Ris
       metric: METRIC,
       maxPoints: MAX_POINTS,
       reason: marketData.available
-        ? "Price, circulating supply and reserves must each be independently validated to measure this ratio."
+        ? totalLiquidity(marketData) === null
+          ? "Independently corroborated reserves are required to measure this ratio."
+          : "A validated price with either corroborated circulating supply or meaningful on-chain supply is required to measure this ratio."
         : NO_MARKET_DATA(marketData.error),
     });
   }
 
+  const basis = VALUATION_BASIS[valuation.basis];
   const ratio = liquidity / cap;
   const rawSeverity = classifyDescending(ratio, RATIO_BANDS);
   const severity = capSeverity(rawSeverity, liquidity);
@@ -167,15 +179,19 @@ export function liquidityRatioRule({ marketData, mintInfo }: AnalysisInput): Ris
     metric: METRIC,
     maxPoints: MAX_POINTS,
     severity,
-    observedValue: `${pct(ratio)} of market cap`,
-    explanation: wasCapped
-      ? `Pooled liquidity is ${pct(ratio)} of this token's ${usd(cap)} market capitalisation. That ratio is low, but ${usd(liquidity)} of absolute depth is more than enough to absorb any realistic exit, so this is scored as a minor signal rather than a serious one. A small ratio is normal for large tokens, whose supply mostly sits in wallets and exchanges rather than in pools.`
+    observedValue: `${pct(ratio)} of ${basis.noun}`,
+    explanation: (wasCapped
+      ? `Pooled liquidity is ${pct(ratio)} of this token's ${usd(cap)} ${basis.long}. That ratio is low, but ${usd(liquidity)} of absolute depth is more than enough to absorb any realistic exit, so this is scored as a minor signal rather than a serious one. A small ratio is normal for large tokens, whose supply mostly sits in wallets and exchanges rather than in pools.`
       : severity === "none"
-        ? `Pooled liquidity equals ${pct(ratio)} of this token's ${usd(cap)} market capitalisation — a healthy ratio, meaning the quoted valuation is backed by a market deep enough to trade against.`
-        : `Pooled liquidity is only ${pct(ratio)} of this token's ${usd(cap)} market capitalisation. The headline valuation rests on comparatively little real depth, so holders attempting to exit together would find far less to sell into than the market cap implies.`,
+        ? `Pooled liquidity equals ${pct(ratio)} of this token's ${usd(cap)} ${basis.long} — a healthy ratio, meaning the valuation is backed by a market deep enough to trade against.`
+        : `Pooled liquidity is only ${pct(ratio)} of this token's ${usd(cap)} ${basis.long}. The valuation rests on comparatively little real depth, so holders attempting to exit together would find far less to sell into than the valuation implies.`) +
+      (valuation.basis === "on-chain-supply-valuation"
+        ? " Circulating supply could not be corroborated, so the valuation uses the full current on-chain minted supply; locked or unissued supply is not excluded, which can make this ratio look lower than a circulating-supply ratio would."
+        : ""),
     evidence: [
       { label: "Total liquidity", value: usd(liquidity) },
-      { label: "Market cap", value: usd(cap) },
+      { label: valuation.basis === "circulating-market-cap" ? "Market cap" : "On-chain supply valuation", value: usd(cap) },
+      { label: "Valuation basis", value: basis.evidence },
       { label: "Ratio", value: pct(ratio) },
       ...(wasCapped
         ? [{ label: "Severity capped", value: `${rawSeverity} → ${severity} (ample absolute depth)` }]

@@ -113,11 +113,13 @@ describe("metric-specific market validation (no all-or-nothing)", () => {
     expect(s.imbalance.status).toBe("unavailable");
   });
 
-  it("a circulating-supply conflict is isolated to market-cap-dependent metrics", () => {
+  it("a circulating-supply conflict is isolated: the ratio falls back to a labelled on-chain supply valuation", () => {
     const v = both([{}, {}], {}, { 0: { marketCap: 1.6e6 }, 1: { marketCap: 1.6e6 } });
     expect(v.marketCap.status).toBe("conflict");
+    expect(v.valuation).toMatchObject({ status: "validated", basis: "on-chain-supply-valuation", value: 2e6 });
     const s = signals(v);
-    expect(s.ratio.status).toBe("unavailable");
+    expect(s.ratio).toMatchObject({ status: "ok", observedValue: "10.00% of on-chain supply valuation" });
+    expect(s.ratio.evidence).toContainEqual({ label: "Valuation basis", value: "On-chain supply valuation: Validated price × current on-chain minted supply (not verified circulating market cap)" });
     for (const k of ["depth", "diversity", "activity", "imbalance", "movement", "age"] as const) expect(s[k].status, k).toBe("ok");
   });
 
@@ -222,7 +224,7 @@ describe("price safety is unchanged", () => {
     expect(Object.values(signals(blocked)).every(x => x.status === "unavailable")).toBe(true);
   });
   it("market interpretation version is unchanged and Signal 14 is untouched", () => {
-    expect(MARKET_ALGORITHM_VERSION).toBe("market-integrity-v2.7");
+    expect(MARKET_ALGORITHM_VERSION).toBe("market-integrity-v2.8");
     const report = buildRiskReport(makeInput({ rugCheck: cleanRugCheck() }), { overview: {} as never, sources: [], elapsedMs: 0 });
     expect(report.signals).toHaveLength(14);
     expect(report.totalWeight).toBe(152);

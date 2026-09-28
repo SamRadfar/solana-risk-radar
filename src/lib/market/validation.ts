@@ -1,4 +1,4 @@
-import type { MarketValidation, ProviderOpinion, ProviderSnapshot, TokenReference, ValidatedMetric, MetricEvidence, MarketPair, PriceHistory, ValidationState, ObservationDecision, SubsetCoverage } from "./types";
+import type { MarketValidation, ProviderOpinion, ProviderSnapshot, TokenReference, ValidatedMetric, MetricEvidence, MarketPair, PriceHistory, ValidationState, ObservationDecision, SubsetCoverage, DayReturnCheck } from "./types";
 import { crossProviderClusters, median, providerConsensus, type ClusterQuarantine } from "./consensus";
 import { agrees, relativeDifference, MARKET_ALGORITHM_VERSION, PRICE_AGREEMENT_TOLERANCE, CIRCULATION_AGREEMENT_TOLERANCE, CHANGE_AGREEMENT_TOLERANCE, DEPTH_AGREEMENT_TOLERANCE, ACTIVITY_AGREEMENT_TOLERANCE, MAX_HISTORY_AGE_MS, MIN_SUBSET_LIQUIDITY_SHARE } from "./policy";
 
@@ -78,6 +78,9 @@ export function validateMarket(mint: string, snapshots: ProviderSnapshot[], refe
       quarantine.set(q.provider, entry);
     }
     for (const provider of priceClusters.quarantinedTokens) quarantine.set(provider, { pools: quarantine.get(provider)?.pools ?? new Set<string>(), token: true });
+    // Within the one corroborated market, a provider's split into member
+    // sub-clusters is not a conflict: candidates must agree with the market center.
+    for (const s of snapshots) quarantine.set(s.provider, { pools: new Set<string>(), token: false, ...quarantine.get(s.provider), marketCenter: priceClusters.market!.center });
   }
   const providers = (quarantine.size ? snapshots.map(s => providerConsensus(s, references, now, quarantine.get(s.provider))) : initial)
     .sort((a,b) => a.provider.localeCompare(b.provider));
@@ -183,6 +186,16 @@ export function validateMarket(mint: string, snapshots: ProviderSnapshot[], refe
     change24h = withheld(price.status as Exclude<ValidationState,"validated">, "Price valuation unresolved; 24h return withheld", change24h.sources);
   }
   for (const m of [marketCap, fdv]) if (m.value !== null && !Number.isFinite(m.value)) Object.assign(m, withheld("unavailable", "Derived valuation is not finite", m.sources));
+  // Valuation hierarchy for Liquidity vs Market Cap. Never provider FDV, max
+  // supply, or an invented circulating supply; never without a validated price.
+  const supplyUsable = totalSupplyUi !== null && Number.isFinite(totalSupplyUi) && totalSupplyUi > 0;
+  const valuation: MarketValidation["valuation"] = marketCap.status === "validated" && marketCap.value !== null
+    ? { ...marketCap, basis: "circulating-market-cap" }
+    : price.value !== null && supplyUsable && Number.isFinite(price.value * totalSupplyUi!)
+      ? { status: "validated", value: price.value * totalSupplyUi!, basis: "on-chain-supply-valuation", sources: price.sources, disagreement: price.disagreement,
+          reason: "On-chain supply valuation: validated price × current on-chain minted supply (not verified circulating market cap)" }
+      : { ...withheld(price.value === null ? (price.status === "validated" ? "unavailable" : price.status as Exclude<ValidationState, "validated">) : "unavailable",
+          price.value === null ? "Price is not independently validated" : "Meaningful on-chain supply is required for an on-chain supply valuation"), basis: null };
   const historyCandidate = usable.flatMap(p => p.observations).filter(o => o.provider === "geckoterminal" && o.accepted)
     .sort((a,b) => (b.liquidityUsd ?? 0) - (a.liquidityUsd ?? 0) || a.pairAddress!.localeCompare(b.pairAddress!))[0];
   const confidence = price.status === "validated"
@@ -196,7 +209,7 @@ export function validateMarket(mint: string, snapshots: ProviderSnapshot[], refe
     history: null, historyCheck: { status: "unavailable", reason: "History not checked", disagreement: null },
     volumeSubset: volumeSubset.withheldAs ? null : volumeSubset.coverage,
     activitySubset: activitySubset.withheldAs ? null : { ...activitySubset.coverage!, buys: sum(activitySubset.measured.map(d => d.buys.value!)), sells: sum(activitySubset.measured.map(d => d.sells.value!)) },
-    change24hSubset, priceClusters,
+    change24hSubset, priceClusters, valuation,
     circulatingSupply: circulation.value, totalSupplyUi };
 }
 
@@ -213,8 +226,54 @@ export function withHistory(validation: MarketValidation, history: PriceHistory,
   const reason = "Fresh GeckoTerminal history contradicts provider spot consensus";
   const block = (m: ValidatedMetric) => withheld("conflict", reason, m.sources, disagreement);
   return { ...v, status: "conflict", confidence: "none", price: block(v.price), marketCap: block(v.marketCap), fdv: block(v.fdv), change24h: block(v.change24h),
+    valuation: { ...block(v.valuation), basis: null },
     liquidity: block(v.liquidity), volume24h: block(v.volume24h), activity: block(v.activity), pairs: [],
     volumeSubset: null, activitySubset: null, change24hSubset: null,
     poolDecisions: v.poolDecisions.map(p => ({ ...p, accepted: false, reason })),
     historyCheck: { status: "conflict", reason, disagreement } };
+}
+
+const HOUR_MS = 60 * 60 * 1000, DAY_MS = 24 * HOUR_MS;
+/** Latest hourly candle must be this recent to prove the series is current. */
+const MAX_DAY_SERIES_LAG_MS = 2 * HOUR_MS;
+/** Reference close must lie within this distance of exactly 24 h ago. */
+const MAX_REFERENCE_OFFSET_MS = HOUR_MS;
+
+/**
+ * 24h movement fallback from requested-mint USD hourly history (GeckoTerminal
+ * OHLCV requested with currency=usd&token=<mint>, so quote-side mints and
+ * stablecoins are native, never inverted). Used only when no provider-level or
+ * same-pool return validated. The pool must be a corroborated pool; the latest
+ * candle must be recent and agree with validated spot (identity/currency proof);
+ * the reference is the close nearest to exactly 24 h ago (within 1 h). A
+ * same-pool provider return, when present, must agree. Otherwise unavailable.
+ */
+export function withDayReturn(validation: MarketValidation, history: PriceHistory, now: number): MarketValidation {
+  const done = (check: DayReturnCheck, change24h = validation.change24h): MarketValidation =>
+    ({ ...validation, change24h, dayReturn: check, pairs: validation.pairs.map(p => ({ ...p, priceChange24h: change24h.value })) });
+  const base: DayReturnCheck = { status: "unavailable", reason: "", pool: history.pool, referenceTime: null, referencePriceUsd: null, samePoolReturn: null };
+  const spot = validation.price.value;
+  if (validation.change24h.status === "validated") return { ...validation, dayReturn: { ...base, status: "not-needed", reason: "Provider 24h return already validated" } };
+  const append = (reason: string) => ({ ...validation.change24h, reason: `${validation.change24h.reason}; history fallback: ${reason}` });
+  const fail = (reason: string, status: "unavailable" | "conflict" = "unavailable") =>
+    done({ ...base, status, reason }, status === "conflict" ? withheld("conflict", `24h history contradicts same-pool provider return: ${reason}`, validation.change24h.sources) : append(reason));
+  if (spot === null || validation.price.status !== "validated") return fail("validated price required");
+  if (history.mint !== validation.mint || !history.side || !history.pool || !validation.pairs.some(p => p.pairAddress === history.pool)) return fail("history is not for the requested mint on a corroborated pool");
+  if (history.error && !history.points.length) return fail(history.error);
+  const points = [...history.points].sort((a, b) => a.t - b.t), latest = points.at(-1);
+  if (!latest || now - latest.t > MAX_DAY_SERIES_LAG_MS || latest.t > now + 60_000) return fail("no recent hourly close");
+  if (!agrees(latest.p, spot)) return fail("latest hourly close does not match validated spot");
+  const target = now - DAY_MS;
+  const reference = points.map(p => ({ ...p, offset: Math.abs(p.t + HOUR_MS - target) }))
+    .filter(p => p.offset <= MAX_REFERENCE_OFFSET_MS).sort((a, b) => a.offset - b.offset || a.t - b.t)[0];
+  if (!reference) return fail("no hourly close within one hour of 24 h ago");
+  const gross = spot / reference.p;
+  const decision = validation.poolDecisions.find(d => d.pairAddress === history.pool);
+  const samePool = decision?.change24h.status === "validated" ? decision.change24h.value : null;
+  const check: DayReturnCheck = { ...base, referenceTime: reference.t + HOUR_MS, referencePriceUsd: reference.p, samePoolReturn: samePool, status: "validated", reason: "" };
+  if (samePool !== null && !agrees(gross, samePool, CHANGE_AGREEMENT_TOLERANCE)) return done({ ...check, status: "conflict", reason: "history-derived and same-pool provider returns disagree" },
+    withheld("conflict", "24h history contradicts same-pool provider return", validation.change24h.sources, relativeDifference(gross, samePool)));
+  const reason = `Validated spot vs requested-mint USD close ${new Date(reference.t + HOUR_MS).toISOString()} on corroborated pool ${history.pool}` +
+    (samePool !== null ? "; same-pool provider return agrees" : "; no same-pool provider return to corroborate");
+  return done({ ...check, reason }, { status: "validated", value: (gross - 1) * 100, reason, sources: validation.change24h.sources, disagreement: null });
 }

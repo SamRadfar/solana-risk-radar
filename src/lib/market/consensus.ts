@@ -18,7 +18,16 @@ function measurement(values: number[], tolerance: number) {
 }
 
 /** Rows a cross-provider cluster decision removed from this provider's price vote. */
-export interface ClusterQuarantine { pools: Set<string>; token: boolean }
+export interface ClusterQuarantine {
+  pools: Set<string>;
+  token: boolean;
+  /**
+   * Center of the one market corroborated across providers. Sub-clusters that
+   * are all members of that market are not an internal conflict; each candidate
+   * must instead agree with this center (existing cluster tolerance).
+   */
+  marketCenter?: number;
+}
 export const QUARANTINE_REASON = "Price cluster quarantined: not corroborated by any independent provider";
 
 /**
@@ -83,7 +92,9 @@ export function providerConsensus(snapshot: ProviderSnapshot, references: TokenR
   const token = snapshot.token?.mint === snapshot.mint && fresh(snapshot.token.fetchedAt, now) && !quarantine?.token ? snapshot.token : null;
   const candidates = groups.map(g => g.priceUsd);
   if (token) candidates.push(token.priceUsd);
-  const conflict = groups.some(g => g.conflict) || (candidates.length > 1 && !agrees(Math.min(...candidates), Math.max(...candidates), POOL_CLUSTER_TOLERANCE));
+  const conflict = quarantine?.marketCenter !== undefined
+    ? candidates.some(c => !agrees(c, quarantine.marketCenter!, POOL_CLUSTER_TOLERANCE))
+    : groups.some(g => g.conflict) || (candidates.length > 1 && !agrees(Math.min(...candidates), Math.max(...candidates), POOL_CLUSTER_TOLERANCE));
   const usable = snapshot.available && fresh(snapshot.fetchedAt, now) && candidates.length > 0;
   // Group medians, then an equal-group median. Presence/count of pools never
   // resolves a conflict, and extra pools on another DEX confer no independence.
@@ -135,14 +146,43 @@ export function crossProviderClusters(opinions: ProviderOpinion[]): ClusterDecis
     if (market && agrees(market.first, c.center, POOL_CLUSTER_TOLERANCE)) market.members.push(c);
     else markets.push({ first: c.center, members: [c] });
   }
-  if (markets.length > 1) return { ...none, status: "corroborated-conflict", corroborated: corroborated.map(describe),
-    reason: "Incompatible price clusters are each independently corroborated by more than one provider" };
-  const members = markets[0].members, center = median(members.map(m => m.center))!;
+  // Underlying-market independence: two APIs reading the SAME physical pool
+  // corroborate that pool's data, not a separately diversified market.
+  // - A market is INDEPENDENTLY DIVERSIFIED only when at least two distinct
+  //   physical pools in it are each read by more than one provider.
+  // - A conflicting range may be quarantined only when it is ONE physical pool
+  //   (however many APIs index it) and exactly one diversified market exists.
+  // Anything else stays a conflict. Counts never pick a winner beyond these
+  // evidence-quality definitions.
+  const poolDepth = (pool: string) => median(eligible.flatMap(p => p.observations
+    .filter(o => o.accepted && !o.lookup && o.pairAddress === pool).map(o => o.liquidityUsd ?? 0))) ?? 0;
+  const support = markets.map(m => {
+    const pools = [...new Set(m.members.flatMap(c => c.pools))].sort();
+    const crossRead = pools.filter(pool => new Set(m.members.filter(c => c.pools.includes(pool)).map(c => c.provider)).size >= 2);
+    return { market: m, pools, crossRead, depth: pools.reduce((sum, pool) => sum + poolDepth(pool), 0) };
+  });
+  let main = markets[0], duplicatedPools: string[] = [];
+  if (markets.length > 1) {
+    const conflict = (reason: string): ClusterDecision => ({ ...none, status: "corroborated-conflict", corroborated: corroborated.map(describe), reason });
+    const diversified = support.filter(s => s.crossRead.length >= 2);
+    if (diversified.length > 1) return conflict("Incompatible price ranges are each supported by independent pools read by more than one provider");
+    if (!diversified.length) return conflict("Incompatible price ranges are each corroborated across providers, and no range is independently diversified");
+    const independent = diversified[0], others = support.filter(s => s !== independent);
+    if (others.some(s => s.pools.length > 1)) return conflict("A conflicting price range is supported by more than one physical pool; it is treated as an independent market");
+    // Conservative veto, never a winner-maker: a single pool holding at least as
+    // much depth as the diversified market is not discarded as an outlier.
+    if (others.some(s => s.depth >= independent.depth)) return conflict("A single-pool price range holds at least as much liquidity as the diversified market; it is not quarantined");
+    main = independent.market;
+    duplicatedPools = others.flatMap(s => s.pools);
+  }
+  const members = main.members, center = median(members.map(m => m.center))!;
   const quarantined = clusters.filter(c => !members.includes(c)).map(describe);
   const quarantinedTokens = eligible.filter(p => p.token && !agrees(p.token.priceUsd, center, POOL_CLUSTER_TOLERANCE)).map(p => p.provider);
-  return { status: "single-market", market: { min: Math.min(...members.map(m => m.min)), max: Math.max(...members.map(m => m.max)) },
-    corroborated: members.map(describe), quarantined, quarantinedTokens,
-    reason: quarantined.length || quarantinedTokens.length
+  return { status: "single-market", market: { min: Math.min(...members.map(m => m.min)), max: Math.max(...members.map(m => m.max)), center },
+    corroborated: members.map(describe), quarantined, quarantinedTokens, duplicatedPools,
+    reason: duplicatedPools.length
+      ? "One independently diversified price range is corroborated across providers; a conflicting range backed only by a single physical pool indexed by several providers is quarantined, as are uncorroborated clusters"
+      : quarantined.length || quarantinedTokens.length
       ? "One price range is corroborated across providers; uncorroborated single-provider clusters are quarantined as outliers"
       : "One price range is corroborated across providers" };
 }

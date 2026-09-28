@@ -1,6 +1,6 @@
 # Market integrity v2
 
-Algorithm/schema: `market-integrity-v2.7`. This layer changes measurement eligibility,
+Algorithm/schema: `market-integrity-v2.8`. This layer changes measurement eligibility,
 not risk bands, category weights, holder classification or authority rules.
 Public market-data providers can be wrong, including in correlated ways. Agreement
 is corroboration, not a guarantee of executable prices or independent upstream ownership.
@@ -83,6 +83,23 @@ candles are removed; conflicting duplicate candles invalidate the series.
   $0.00000249 beside 23 pools near $0.00000372 that GeckoTerminal corroborated;
   v2.6 withheld every market metric, v2.7 quarantines the stale pool. The
   historical JUP ~$1,638 pools stay out of price in every case.
+- **Underlying-market independence (v2.8).** Two APIs reading the SAME physical
+  pool corroborate that pool's data; they do not establish an independently
+  diversified market. A price range is *independently diversified* only when at
+  least two distinct physical pools in it are each read by more than one provider.
+  When corroborated ranges conflict:
+  - exactly one range is diversified and every conflicting range is ONE physical
+    pool (however many APIs index it): the single-pool range is quarantined;
+  - two or more ranges are diversified, a conflicting range has more than one
+    physical pool, or no range is diversified: conflict, no canonical price;
+  - conservative veto (never a winner-maker): a single-pool range holding at
+    least as much liquidity as the diversified range is not quarantined.
+  Pool count beyond these evidence definitions never picks a winner: several
+  pools each seen by only one provider cannot out-rank a range read by both.
+  Within ONE corroborated market, a provider whose continuous price spread
+  happens to chain into several member sub-clusters is not in conflict; each of
+  its candidate prices must instead agree with the corroborated market center
+  (existing 10% tolerance), and providers must still agree within 5%.
   Another provider can be added via snapshots without rewriting risk rules.
 
 ## States and per-metric policy
@@ -211,10 +228,38 @@ DS, GT token and GT pools start concurrently. Then one bounded counter-token bat
 (maximum 12 sorted distinct mints) is fetched; then, only when no pool could be
 corroborated, one GT by-address pool lookup (maximum 30 pools); then at most one
 history request.
-Each request times out after eight seconds. A temporary 429/503 reuses the last
-successful response for the same URL only while it is within the existing 90 s
-snapshot freshness limit, carrying its original timestamp; errors are never
-retained, and the optional chart endpoint never caches transport failures. An outage lowers coverage; it cannot
+Each request times out after eight seconds.
+
+**Rate limits (v2.8).** GeckoTerminal allows about five requests per burst and
+answers `Retry-After: 0` while staying limited for ~20 s (measured 2026-09-28).
+- Request priority: scored price/pool evidence first; then, only when needed,
+  the by-address pool lookup (it decides every pool-based signal), counter
+  references not already priced by GeckoTerminal's own pool rows (veto-only),
+  and 24 h history; the optional 4 h chart last. Fetch order never changes the
+  inputs of the final validation.
+- A temporary failure (429, 5xx, timeout) reuses the last successful response for
+  the exact URL only within the existing 90 s snapshot freshness limit, with its
+  ORIGINAL `fetchedAt`; stale responses and errors are never used. Reuse is
+  recorded in provider errors and `requestLog`.
+- After a 429 with a zero `Retry-After` the host cools down for 20 s: fresh cached
+  successes are served without a request, optional chart requests are skipped,
+  and there is no immediate re-hit. An absent header still allows one short retry.
+- Chart/history failures never remove scored metrics.
+
+**Valuation hierarchy (v2.8).** Liquidity vs Market Cap uses validated circulating
+market cap when available. Otherwise, only with a validated canonical price and
+meaningful on-chain supply, it uses an **On-chain supply valuation: validated price
+× current on-chain minted supply**, labelled as such and never presented as
+circulating market cap. Provider FDV, max supply and invented circulation are not used.
+
+**24 h movement fallback (v2.8).** When neither the provider-level nor the
+same-pool return validates, and price is validated, requested-mint USD hourly
+OHLCV (`currency=usd&token=<mint>`, native for quote-side mints and stablecoins)
+is read for the deepest corroborated pool. The latest hourly close must be within
+2 h and agree with validated spot (5%); the reference is the close nearest to
+exactly 24 h ago (within 1 h); a same-pool provider 24 h change, when present,
+must agree (5% gross), otherwise the movement is a conflict. Missing or stale
+history leaves the signal unavailable. An outage lowers coverage; it cannot
 elevate another provider's credibility. No paid service, secret or environment
 change is needed. Rate limits on shared public IPs can still reduce availability.
 

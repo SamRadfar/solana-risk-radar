@@ -1,4 +1,4 @@
-import type { MarketData, MarketPair, MarketValidation, ValidatedMetric } from "./types";
+import type { MarketData, MarketPair, MarketValidation, ValidatedMetric, ValuationBasis } from "./types";
 import { MARKET_ALGORITHM_VERSION } from "./policy";
 import { validateMarket } from "./validation";
 import { fresh } from "./consensus";
@@ -31,6 +31,19 @@ export const marketCap = (m: MarketData, totalSupplyUi?: number): number | null 
   if (totalSupplyUi !== undefined && v.circulatingSupply !== null && v.circulatingSupply > totalSupplyUi * 1.02) return null;
   return metricValue(v.marketCap);
 };
+/**
+ * Valuation for Liquidity vs Market Cap: validated circulating market cap first;
+ * otherwise validated price × meaningful on-chain minted supply, labelled as
+ * such. No validated price means no valuation.
+ */
+export function marketValuation(m: MarketData, totalSupplyUi?: number): { value: number; basis: ValuationBasis } | null {
+  const cap = marketCap(m, totalSupplyUi);
+  if (cap !== null) return { value: cap, basis: "circulating-market-cap" };
+  const price = spotPrice(m);
+  if (price === null || totalSupplyUi === undefined || !Number.isFinite(totalSupplyUi) || totalSupplyUi <= 0 || validationOf(m).totalSupplyUi !== totalSupplyUi) return null;
+  const value = price * totalSupplyUi;
+  return Number.isFinite(value) && value > 0 ? { value, basis: "on-chain-supply-valuation" } : null;
+}
 export const fullyDilutedValuation = (m: MarketData, totalSupplyUi: number) =>
   validationOf(m).totalSupplyUi === totalSupplyUi ? metricValue(validationOf(m).fdv) : null;
 export const pairsByLiquidity = (m: MarketData): MarketPair[] =>

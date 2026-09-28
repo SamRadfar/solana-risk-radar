@@ -1,5 +1,5 @@
 import { validateMintAddress } from "../solana/address";
-import { TRUSTED_QUOTE_MINTS } from "../market/policy";
+import { TRUSTED_QUOTE_MINTS, agrees } from "../market/policy";
 import type { PoolObservation, ProviderSnapshot, TokenReference } from "../market/types";
 import { object, list, string, positive, nonnegative, finite, safeUrl, marketJson } from "./market-http";
 
@@ -60,12 +60,30 @@ export async function getGeckoSnapshot(mint: string): Promise<ProviderSnapshot> 
     available: validToken !== null || Array.isArray(object(poolsResult.body).data), token: validToken, observations, errors };
 }
 /**
+ * Counter-asset USD references taken from GeckoTerminal's OWN pool rows (their
+ * counter-token USD field), so the separate reference request is only spent on
+ * counters GeckoTerminal's pool list does not already price. Same evidence as
+ * the token endpoint (GeckoTerminal's USD price for that token); rows for one
+ * counter must agree, otherwise that counter is left to the reference request.
+ */
+export function geckoReferencesFromPools(observations: PoolObservation[], counters: string[]): TokenReference[] {
+  return counters.flatMap(mint => {
+    const rows = observations.filter(o => o.provider === "geckoterminal" && !o.identityError && o.counterMint === mint &&
+      o.reportedCounterPriceUsd !== undefined && o.reportedCounterPriceUsd !== null && o.reportedCounterPriceUsd > 0);
+    const prices = rows.map(o => o.reportedCounterPriceUsd!).sort((a, b) => a - b);
+    if (!prices.length || !agrees(prices[0], prices[prices.length - 1])) return [];
+    return [{ provider: "geckoterminal", mint, priceUsd: prices[Math.floor(prices.length / 2)], marketCap: null,
+      fetchedAt: Math.min(...rows.map(o => o.fetchedAt)), sourceUrl: rows[0].sourceUrl }];
+  });
+}
+/**
  * GeckoTerminal's view of specific pools, fetched by address because another
  * provider listed them. Used only to corroborate those pools, never as a price vote.
  */
 export async function getGeckoPoolsByAddress(mint: string, addresses: string[]): Promise<{ observations: PoolObservation[]; error: string | null }> {
   if (!addresses.length) return { observations: [], error: null };
-  const result = await marketJson(GECKO_ENDPOINT + "/pools/multi/" + addresses.map(encodeURIComponent).join(",") + "?include=base_token,quote_token");
+  // Sorted so the same pool set is the same request (and can reuse a fresh success).
+  const result = await marketJson(GECKO_ENDPOINT + "/pools/multi/" + [...addresses].sort().map(encodeURIComponent).join(",") + "?include=base_token,quote_token");
   const observations = normalizeGeckoPools(result.body, mint, result.fetchedAt).filter(o => o.pairAddress !== null && addresses.includes(o.pairAddress));
   return { observations, error: result.error ?? (!Array.isArray(object(result.body).data) ? "Malformed pool lookup response" : result.events.join("; ") || null) };
 }

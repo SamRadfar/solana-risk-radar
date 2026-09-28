@@ -1,23 +1,35 @@
 import { getDexScreenerSnapshot } from "../providers/dexscreener";
-import { getGeckoPoolsByAddress, getGeckoReferences, getGeckoSnapshot } from "../providers/gecko-market";
-import { getPriceHistory } from "../providers/geckoterminal";
+import { geckoReferencesFromPools, getGeckoPoolsByAddress, getGeckoReferences, getGeckoSnapshot } from "../providers/gecko-market";
+import { getDayPriceHistory, getPriceHistory } from "../providers/geckoterminal";
 import { MAX_POOL_LOOKUPS, MAX_QUOTE_REFERENCES, MIN_OBSERVATION_LIQUIDITY_USD } from "./policy";
-import { validateMarket, withHistory } from "./validation";
-import type { MarketData } from "./types";
+import { validateMarket, withDayReturn, withHistory } from "./validation";
+import type { MarketData, MarketValidation } from "./types";
 
-/** Network orchestration stays outside pure validation and the risk engine. */
+const reused = (events: string[] | undefined) => (events ?? []).some(e => e.includes("reused a successful response"));
+
+/**
+ * Network orchestration stays outside pure validation and the risk engine.
+ * Request priority (GeckoTerminal allows only a few requests per burst):
+ *   1. scored price/pool evidence (DexScreener + GeckoTerminal token and pools)
+ *   2. corroboration evidence only when needed (counter references not already
+ *      priced by GeckoTerminal's pools; by-address pool lookup; 24h history)
+ *   3. optional 4h chart context last, skipped while the provider is rate-limited.
+ */
 export async function getMarketData(mint: string, totalSupplyUi: number | null): Promise<MarketData> {
   const [dex, gecko] = await Promise.all([getDexScreenerSnapshot(mint), getGeckoSnapshot(mint)]);
   const counters = [...new Set(dex.observations.filter(o => !o.identityError && o.counterMint).map(o => o.counterMint!))]
     .sort().slice(0, MAX_QUOTE_REFERENCES);
-  const { references, error } = await getGeckoReferences(counters);
-  let validation = validateMarket(mint, [dex, gecko], references, Date.now(), totalSupplyUi);
+  const derived = geckoReferencesFromPools(gecko.observations, counters);
+  const missing = counters.filter(c => !derived.some(r => r.mint === c));
   // Providers list different pool subsets; for USDC they can be disjoint, so no
   // pool is corroborated at all. Only then, look up DexScreener-listed pools on
-  // GeckoTerminal by address (one bounded request; GeckoTerminal rate-limits
-  // tightly, so it is not spent when pools already overlap). Lookup rows never
-  // vote on price, so this second pass cannot change the validated price.
-  if (validation.price.status === "validated" && validation.liquidity.status !== "validated") {
+  // GeckoTerminal by address. The lookup decides every pool-based signal, so it
+  // is requested BEFORE the counter-reference batch (a veto-only check whose
+  // absence is already handled safely). Lookup rows never vote on price, and
+  // the final validation below uses the same inputs whatever the fetch order.
+  const preliminary = validateMarket(mint, [dex, gecko], derived, Date.now(), totalSupplyUi);
+  let lookups: typeof gecko.observations = [], poolLookup: MarketValidation["poolLookup"];
+  if (preliminary.price.status === "validated" && preliminary.liquidity.status !== "validated") {
     const listedByGecko = new Set(gecko.observations.map(o => o.pairAddress));
     const lookupTargets = [...new Set(dex.observations
       .filter(o => !o.identityError && o.pairAddress && !listedByGecko.has(o.pairAddress) && (o.liquidityUsd ?? 0) >= MIN_OBSERVATION_LIQUIDITY_USD)
@@ -25,15 +37,35 @@ export async function getMarketData(mint: string, totalSupplyUi: number | null):
       .map(o => o.pairAddress!))].slice(0, MAX_POOL_LOOKUPS);
     if (lookupTargets.length) {
       const lookup = await getGeckoPoolsByAddress(mint, lookupTargets);
-      validation = validateMarket(mint, [dex, { ...gecko, lookups: lookup.observations }], references, Date.now(), totalSupplyUi);
-      validation.poolLookup = { requested: lookupTargets.length, returned: lookup.observations.length, error: lookup.error };
+      lookups = lookup.observations;
+      poolLookup = { requested: lookupTargets.length, returned: lookup.observations.length, error: lookup.error };
     }
   }
-  validation.counterReferences = { requestedMints: counters, observations: references, error };
+  const fetched = await getGeckoReferences(missing);
+  const references = [...derived, ...fetched.references];
+  let validation = validateMarket(mint, [dex, lookups.length ? { ...gecko, lookups } : gecko], references, Date.now(), totalSupplyUi);
+  if (poolLookup) validation.poolLookup = poolLookup;
+  const requestLog: NonNullable<MarketValidation["requestLog"]> = [
+    { request: "dexscreener pools", cached: reused(dex.errors), error: dex.available ? null : dex.errors.at(-1) ?? "unavailable" },
+    { request: "geckoterminal token and pools", cached: reused(gecko.errors), error: gecko.available ? null : gecko.errors.at(-1) ?? "unavailable" },
+    ...(poolLookup ? [{ request: `geckoterminal pool lookup (${poolLookup.requested} pools)`, cached: false, error: poolLookup.error }] : []),
+    { request: `geckoterminal counter references (${missing.length} requested, ${derived.length} from pool rows)`, cached: false, error: fetched.error },
+  ];
+  validation.counterReferences = { requestedMints: counters, observations: references, error: fetched.error };
+  // 24h movement fallback (scored): only when no provider or same-pool return validated.
+  if (validation.price.status === "validated" && validation.change24h.status !== "validated" && validation.pairs.length) {
+    const pool = [...validation.pairs].sort((a, b) => b.liquidityUsd - a.liquidityUsd || (a.pairAddress ?? "").localeCompare(b.pairAddress ?? ""))[0].pairAddress!;
+    const day = await getDayPriceHistory(mint, pool);
+    validation = withDayReturn(validation, day, Date.now());
+    requestLog.push({ request: "geckoterminal 24h requested-mint USD history", cached: reused(day.events), error: day.error ?? null });
+  }
+  // Optional chart context last; it never spends a rate-limited provider's budget.
   if (validation.historyPool) {
     const history = await getPriceHistory(mint, validation.historyPool.pairAddress);
     validation = withHistory(validation, history, Date.now());
+    requestLog.push({ request: "geckoterminal 4h chart history (optional)", cached: reused(history.events), error: history.error ?? null });
   }
+  validation.requestLog = requestLog;
   const identity = validation.providers.flatMap(p => p.observations).find(o => o.accepted);
   return { available: dex.available || gecko.available, pairs: validation.pairs, validation,
     name: identity ? (identity.side === "base" ? identity.baseName : identity.quoteName) ?? null : null, symbol: identity ? identity.side === "base" ? identity.baseSymbol : identity.quoteSymbol : null,
