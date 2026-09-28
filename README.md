@@ -20,7 +20,7 @@
   <img src="https://img.shields.io/badge/Solana-mainnet-9945FF?style=flat&logo=solana&logoColor=white" alt="Solana mainnet"/>
   <img src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat&logo=typescript&logoColor=white" alt="TypeScript"/>
   <img src="https://img.shields.io/badge/Next.js-16-000000?style=flat&logo=nextdotjs&logoColor=white" alt="Next.js 16"/>
-  <img src="https://img.shields.io/badge/tests-171%20passing-3ECF8E?style=flat&logo=vitest&logoColor=white" alt="171 unit tests"/>
+  <img src="https://img.shields.io/badge/tests-354%20passing-3ECF8E?style=flat&logo=vitest&logoColor=white" alt="354 unit tests"/>
   <img src="https://img.shields.io/badge/API%20keys-none%20required-64748B?style=flat" alt="No API keys required"/>
 </p>
 
@@ -74,13 +74,13 @@ Risk Radar is built the other way round. The point is not the score — it is th
 ```
 Solana mint address
    ↓  validated in the browser and again on the server (same pure function)
-Live data providers      Solana JSON-RPC · Metaplex / Token-2022 · DexScreener · GeckoTerminal
+Live data providers      Solana JSON-RPC · Metaplex / Token-2022 · DexScreener · GeckoTerminal · RugCheck
    ↓  fetched concurrently
 Validation               canonical mint identity, multi-pool consensus, outlier rejection
    ↓
 Evidence resolution      token accounts → owning wallets → controlling program
    ↓
-Risk analysis            13 deterministic rules across 5 equally weighted categories
+Risk analysis            13 deterministic rules + RugCheck cross-check, 5 equally weighted categories
    ↓
 Explainable report       score · verdict · main concerns · full evidence · provenance
 ```
@@ -242,9 +242,9 @@ Risk Radar is built to be trustworthy about what it does *not* know:
   creation timestamp is available, maturity is unmeasured and excluded from scoring.
 - **Pool and burn shares cover the largest accounts only**, not the whole supply. The UI says so
   where it matters.
-- **Market data reflects what DexScreener has indexed.** A token with no indexed pool shows "no
-  pools found", which is a real signal, not a bug. Consensus is resistant to a manipulated pool,
-  but not to a manipulated *provider*.
+- **Market data reflects what DexScreener and GeckoTerminal have indexed.** A token with no
+  indexed pool has no market data to validate, which is a real finding, not a bug. Consensus is
+  resistant to a manipulated pool, but not to providers that agree incorrectly.
 - **Vesting schedules are never read.** Real, honest locks therefore appear as *Lock / vesting
   program* with zero locked supply. This errs toward reporting more risk than exists, which is
   the safe direction.
@@ -268,7 +268,7 @@ time and nothing is stored.
 | **Solana JSON-RPC** | Mint account, token accounts and their owners, account states, SPL multisig decoding | None — a built-in list of public endpoints with automatic failover, or your own via `SOLANA_RPC_URL` |
 | **Metaplex / Token-2022 metadata** | Name, symbol, update authority, mutability, extensions | None — read directly from chain |
 | **DexScreener** | Pools, liquidity, volume, trade counts, pool age, quoted prices | None — free public API |
-| **GeckoTerminal** | 4-hour OHLCV for the market context chart | None — free public API |
+| **GeckoTerminal** | Independent second market opinion for price consensus; hourly OHLCV as the 24h-change fallback; 5-minute OHLCV for the 4H market context chart | None — free public API |
 | **RugCheck** | External security cross-check (Rug / Security Risk). Weight 6 only when it reports RugCheck-specific issues; clean, overlap-only or unavailable results are context only and never lower the 13-signal score | None — public report summary API |
 
 The two market APIs are rate-limited on their free tiers, so completed reports are cached in
@@ -285,7 +285,7 @@ no clock, randomness or I/O. Module-by-module breakdown in [`ARCHITECTURE.md`](A
 <br>
 
 ```bash
-npm test        # 171 unit tests, no network
+npm test        # 354 unit tests, no network
 ```
 
 These cover every threshold boundary, both directions of each two-sided rule, the missing-data
@@ -343,7 +343,7 @@ Open <http://localhost:3000>, paste a mint address, or click one of the **Try** 
 BONK, JUP, ORCA.
 
 **No API keys. No accounts. No database.** The app works out of the box against public Solana
-RPC endpoints and DexScreener's free public API.
+RPC endpoints and the free public DexScreener, GeckoTerminal and RugCheck APIs.
 
 <details>
 <summary><b>Optional: your own RPC endpoint, and the full script list</b></summary>
@@ -367,7 +367,7 @@ See [`.env.example`](.env.example) for the details — including one endpoint yo
 | `npm run dev` | Development server |
 | `npm run build` | Production build |
 | `npm run start` | Serve the production build |
-| `npm test` | Unit tests for the risk engine (no network) |
+| `npm test` | Unit tests for the risk engine and market data layer (no network) |
 | `npm run typecheck` | TypeScript, no emit |
 | `npm run lint` | ESLint |
 | `npm run verify` | typecheck → lint → test → build |
