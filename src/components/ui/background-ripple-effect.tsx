@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export const BackgroundRippleEffect = ({
@@ -16,7 +16,51 @@ export const BackgroundRippleEffect = ({
     col: number;
   } | null>(null);
   const [rippleKey, setRippleKey] = useState(0);
+  const [hoveredCell, setHoveredCell] = useState<number | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  // Hover is resolved from pointer coordinates rather than per-cell :hover:
+  // the hero content sits above the grid and would otherwise swallow the
+  // pointer over most cells. Mouse only, so touch never leaves a stuck cell.
+  useEffect(() => {
+    let current: number | null = null;
+    let last: { x: number; y: number } | null = null;
+    const update = (next: number | null) => {
+      if (next !== current) {
+        current = next;
+        setHoveredCell(next);
+      }
+    };
+    const resolve = () => {
+      const root = ref.current, grid = gridRef.current;
+      if (!last || !root || !grid) return update(null);
+      const box = root.getBoundingClientRect();
+      if (last.x < box.left || last.x >= box.right || last.y < box.top || last.y >= box.bottom) return update(null);
+      const r = grid.getBoundingClientRect();
+      const col = Math.floor((last.x - r.left) / cellSize), row = Math.floor((last.y - r.top) / cellSize);
+      update(row >= 0 && row < rows && col >= 0 && col < cols ? row * cols + col : null);
+    };
+    const onMove = (e: PointerEvent) => {
+      last = e.pointerType === "mouse" ? { x: e.clientX, y: e.clientY } : null;
+      resolve();
+    };
+    const onLeave = () => {
+      last = null;
+      update(null);
+    };
+    const html = document.documentElement;
+    window.addEventListener("pointermove", onMove, { passive: true });
+    window.addEventListener("scroll", resolve, { passive: true });
+    window.addEventListener("blur", onLeave);
+    html.addEventListener("mouseleave", onLeave);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("scroll", resolve);
+      window.removeEventListener("blur", onLeave);
+      html.removeEventListener("mouseleave", onLeave);
+    };
+  }, [rows, cols, cellSize]);
 
   return (
     <div
@@ -38,6 +82,8 @@ export const BackgroundRippleEffect = ({
           borderColor="var(--cell-border-color)"
           fillColor="var(--cell-fill-color)"
           clickedCell={clickedCell}
+          hoveredCell={hoveredCell}
+          gridRef={gridRef}
           onCellClick={(row, col) => {
             setClickedCell({ row, col });
             setRippleKey((k) => k + 1);
@@ -57,6 +103,8 @@ type DivGridProps = {
   borderColor: string;
   fillColor: string;
   clickedCell: { row: number; col: number } | null;
+  hoveredCell?: number | null;
+  gridRef?: React.Ref<HTMLDivElement>;
   onCellClick?: (row: number, col: number) => void;
   interactive?: boolean;
 };
@@ -74,6 +122,8 @@ const DivGrid = ({
   borderColor = "#3f3f46",
   fillColor = "rgba(14,165,233,0.3)",
   clickedCell = null,
+  hoveredCell = null,
+  gridRef,
   onCellClick = () => {},
   interactive = true,
 }: DivGridProps) => {
@@ -92,7 +142,7 @@ const DivGrid = ({
   };
 
   return (
-    <div className={cn("relative z-[3]", className)} style={gridStyle}>
+    <div ref={gridRef} className={cn("relative z-[3]", className)} style={gridStyle}>
       {cells.map((idx) => {
         const rowIdx = Math.floor(idx / cols);
         const colIdx = idx % cols;
@@ -113,7 +163,8 @@ const DivGrid = ({
           <div
             key={idx}
             className={cn(
-              "cell relative border-[0.5px] opacity-40 transition-opacity duration-150 will-change-transform hover:opacity-80 dark:shadow-[0px_0px_40px_1px_var(--cell-shadow-color)_inset]",
+              "cell relative border-[0.5px] transition-opacity duration-200 ease-out will-change-transform dark:shadow-[0px_0px_40px_1px_var(--cell-shadow-color)_inset]",
+              hoveredCell === idx ? "opacity-100" : "opacity-30",
               clickedCell && "animate-cell-ripple [animation-fill-mode:none]",
               !interactive && "pointer-events-none",
             )}
