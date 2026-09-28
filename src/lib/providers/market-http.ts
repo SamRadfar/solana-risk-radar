@@ -1,4 +1,4 @@
-import { PROVIDER_TIMEOUT_MS } from "../market/policy";
+import { MAX_SNAPSHOT_AGE_MS, PROVIDER_TIMEOUT_MS } from "../market/policy";
 
 export function object(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -29,6 +29,27 @@ export function safeUrl(value: unknown): string | null {
 interface MarketResponse { body: unknown; fetchedAt: number; error: string | null; events: string[] }
 const pending = new Map<string, Promise<MarketResponse>>();
 const MAX_RETRY_DELAY_MS = 1500;
+/**
+ * Last SUCCESSFUL response per URL. Used only when the provider temporarily
+ * answers 429/503, only while still within the existing snapshot freshness
+ * limit, and always with its ORIGINAL fetchedAt, so downstream freshness checks
+ * judge it by its true age. Errors are never retained.
+ */
+const retained = new Map<string, { body: unknown; fetchedAt: number }>();
+const MAX_RETAINED = 256;
+function retain(url: string, body: unknown, fetchedAt: number) {
+  retained.delete(url);
+  retained.set(url, { body, fetchedAt });
+  while (retained.size > MAX_RETAINED) retained.delete(retained.keys().next().value!);
+}
+function stillFresh(url: string): { body: unknown; fetchedAt: number } | null {
+  const kept = retained.get(url);
+  if (!kept) return null;
+  if (Date.now() - kept.fetchedAt > MAX_SNAPSHOT_AGE_MS) { retained.delete(url); return null; }
+  return kept;
+}
+/** Test hook. */
+export function clearRetainedResponses() { retained.clear(); }
 
 /** Concurrent identical reads share a promise, never a retained/stale response. */
 export function marketJson(url: string): Promise<MarketResponse> {
@@ -48,9 +69,17 @@ async function requestJson(url: string): Promise<MarketResponse> {
         signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
         headers: { Accept: "application/json" }, cache: "no-store",
       });
-      if (response.ok) return { body: await response.json(), fetchedAt: Date.now(), error: null, events };
+      if (response.ok) {
+        const body = await response.json(), fetchedAt = Date.now();
+        retain(url, body, fetchedAt);
+        return { body, fetchedAt, error: null, events };
+      }
       error = "Market service returned HTTP " + response.status;
       retry = response.status === 429 || response.status === 503;
+      // A temporary rate limit reuses a still-fresh success instead of spending another request.
+      const kept = retry ? stillFresh(url) : null;
+      if (kept) return { body: kept.body, fetchedAt: kept.fetchedAt, error: null,
+        events: [...events, `${error}; reused a successful response from ${Math.round((Date.now() - kept.fetchedAt) / 1000)}s earlier (within the freshness limit)`] };
       const after = response.headers.get("retry-after");
       if (after !== null) {
         const ms = /^\d+(\.\d+)?$/.test(after) ? Number(after) * 1000 : Date.parse(after) - Date.now();

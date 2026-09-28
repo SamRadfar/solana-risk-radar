@@ -175,10 +175,24 @@ export interface MarketValidation {
   volumeSubset: SubsetCoverage | null;
   activitySubset: (SubsetCoverage & { buys: number; sells: number }) | null;
   change24hSubset: SubsetCoverage | null;
+  /** How cross-provider price clusters were resolved before price comparison. */
+  priceClusters?: ClusterDecision;
   /** By-address pool corroboration lookup, when performed. Diagnostics only. */
   poolLookup?: { requested: number; returned: number; error: string | null };
   circulatingSupply: number | null;
   totalSupplyUi: number | null;
+}
+
+/** Cross-provider price-cluster decision (see crossProviderClusters). */
+export interface ClusterDecision {
+  status: "single-market" | "corroborated-conflict" | "not-applicable";
+  /** Price range of the corroborated market, when exactly one exists. */
+  market: { min: number; max: number } | null;
+  corroborated: { provider: string; min: number; max: number; pools: string[] }[];
+  /** Single-provider clusters excluded from price as uncorroborated outliers. */
+  quarantined: { provider: string; min: number; max: number; pools: string[] }[];
+  quarantinedTokens: string[];
+  reason: string;
 }
 
 /** A metric measured on a subset of the corroborated pools, with honest coverage. */

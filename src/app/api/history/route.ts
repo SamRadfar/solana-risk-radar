@@ -35,9 +35,10 @@ export async function GET(request: NextRequest) {
 
   const history = await getPriceHistory(mint.address, pool.address);
 
-  // Cached briefly either way: a token with no indexed history should not send
-  // a request upstream on every render.
-  setCached(key, history, 60_000);
+  // A token with no indexed history is cached briefly so it does not send a
+  // request upstream on every render. Transport failures (429, timeout) are
+  // never cached: they are not evidence, and a retry may succeed.
+  if (!history.error?.startsWith("Market service")) setCached(key, history, 60_000);
 
   return NextResponse.json(history, {
     headers: { "Cache-Control": "private, no-store", "X-Cache": "miss" },
