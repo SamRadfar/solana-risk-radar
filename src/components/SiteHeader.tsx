@@ -111,24 +111,6 @@ export default function SiteHeader({
         <div className={styles.spacer} />
 
         {/*
-          Product metadata rather than three buttons: one capsule, dot
-          indicators, hairline separators, and deliberately quieter than the
-          action beside it.
-        */}
-        <div className={styles.trust} aria-label="Product guarantees">
-          <span className={styles.trustItem}>
-            <span className={styles.dot} aria-hidden="true" />
-            Deterministic
-          </span>
-          <span className={styles.sep} aria-hidden="true" />
-          <span className={styles.trustItem}>No API keys</span>
-          <span className={`${styles.sep} ${styles.trustOptional}`} aria-hidden="true" />
-          <span className={`${styles.trustItem} ${styles.trustOptional}`}>
-            Evidence-backed
-          </span>
-        </div>
-
-        {/*
           Replaying the tour is an action, not navigation, so it is a button —
           and only rendered when the page actually provides a tour.
         */}
