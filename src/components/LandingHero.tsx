@@ -46,12 +46,12 @@ export default function LandingHero({
       {/*
         Aceternity background ripple, layered ABOVE the global ambient gradient
         (fixed, full-viewport, rendered by AmbientBackground) and BELOW the hero
-        content. Subtle (35%) and radially masked so it is strongest centre-right
+        content. Subtle (60%) and radially masked so it is strongest centre-right
         and fades out behind the headline and before every edge of this box, so
         it can never cut a straight seam against the gradient.
       */}
       <div
-        className="dark absolute inset-0 z-0 overflow-hidden opacity-35"
+        className="dark absolute inset-0 z-0 overflow-hidden opacity-60"
         style={{
           maskImage: "radial-gradient(ellipse 55% 75% at 66% 45%, #000 15%, transparent 100%)",
           WebkitMaskImage: "radial-gradient(ellipse 55% 75% at 66% 45%, #000 15%, transparent 100%)",
