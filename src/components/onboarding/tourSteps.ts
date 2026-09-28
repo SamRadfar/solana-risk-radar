@@ -61,7 +61,7 @@ export const PRODUCT_TOUR: TourDefinition = {
       id: "analyse",
       title: "Analyse any token",
       description:
-        "Paste any SPL or Token-2022 mint to begin. Or start from one of the examples — USDC, BONK, JUP, ORCA — to see how reports differ across tokens. They are examples, not recommendations.",
+        "Paste any SPL or Token-2022 mint to begin. Or start from one of the examples — WIF, BONK, JUP, ORCA — to see how reports differ across tokens. They are examples, not recommendations.",
       target: "[data-tour='analyser']",
       visual: {
         src: "/tour/analyse.webp",
