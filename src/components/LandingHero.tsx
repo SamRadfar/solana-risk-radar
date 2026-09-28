@@ -1,4 +1,5 @@
 import Reveal from "./Reveal";
+import { BackgroundRippleEffect } from "./ui/background-ripple-effect";
 import TokenInputForm from "./TokenInputForm";
 
 /**
@@ -42,9 +43,26 @@ export default function LandingHero({
         which is fixed and full-viewport and therefore has no edge anywhere on
         screen to cut against.
       */}
+      {/*
+        Aceternity background ripple, layered ABOVE the global ambient gradient
+        (fixed, full-viewport, rendered by AmbientBackground) and BELOW the hero
+        content. Subtle (25%) and radially masked so it is strongest centre-right
+        and fades out behind the headline and before every edge of this box, so
+        it can never cut a straight seam against the gradient.
+      */}
+      <div
+        className="dark absolute inset-0 z-0 overflow-hidden opacity-25"
+        style={{
+          maskImage: "radial-gradient(ellipse 55% 75% at 66% 45%, #000 15%, transparent 100%)",
+          WebkitMaskImage: "radial-gradient(ellipse 55% 75% at 66% 45%, #000 15%, transparent 100%)",
+        }}
+        aria-hidden="true"
+      >
+        <BackgroundRippleEffect rows={12} cols={27} />
+      </div>
       {/* 56/44 — the analyser needs enough width to show a full 44-character
           mint address without the field scrolling. */}
-      <div className="grid items-start gap-10 lg:gap-16 lg:grid-cols-[56fr_44fr]">
+      <div className="pointer-events-none relative z-10 grid items-start gap-10 lg:gap-16 lg:grid-cols-[56fr_44fr] [&>*]:pointer-events-auto">
         <Message />
         <Analyser onAnalyze={onAnalyze} loading={loading} />
       </div>
